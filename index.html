@@ -1,0 +1,45 @@
+<!-- Version 0.1 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Electrical Schematic Builder</title>
+
+  <link rel="stylesheet" href="styles.css?v=0.1" />
+</head>
+
+<body>
+  <main id="app">
+    <section id="stage" aria-label="Schematic builder stage">
+      <svg
+        id="circuitSvg"
+        viewBox="0 0 1920 1080"
+        preserveAspectRatio="xMidYMid meet"
+      ></svg>
+
+      <div id="overlays" aria-label="Interactive controls"></div>
+    </section>
+  </main>
+
+  <script src="js/config.js?v=0.1"></script>
+  <script src="js/geometry.js?v=0.1"></script>
+  <script src="js/state.js?v=0.1"></script>
+  <script src="js/svg-drawing.js?v=0.1"></script>
+
+  <script src="symbols/symbol-library.js?v=0.1"></script>
+  <script src="symbols/symbols-coil-contact.js?v=0.1"></script>
+  <script src="symbols/symbols-power.js?v=0.1"></script>
+  <script src="symbols/symbols-hvac-inputs.js?v=0.1"></script>
+  <script src="symbols/symbols-loads.js?v=0.1"></script>
+  <script src="symbols/symbols-misc.js?v=0.1"></script>
+
+  <script src="engine/netlist.js?v=0.1"></script>
+
+  <script src="ui/palette.js?v=0.1"></script>
+  <script src="ui/canvas-interactions.js?v=0.1"></script>
+  <script src="ui/wire-tool.js?v=0.1"></script>
+
+  <script src="script.js?v=0.3"></script>
+</body>
+</html>
