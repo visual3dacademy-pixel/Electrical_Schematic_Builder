@@ -12,9 +12,17 @@
   window.ESB = window.ESB || {};
 
   function refKey(ref) {
-    return ref.kind === "terminal"
-      ? `t:${ref.instanceId}:${ref.terminalId}`
-      : `j:${ref.junctionId}`;
+    if (ref.kind === "terminal") {
+      return `t:${ref.instanceId}:${ref.terminalId}`;
+    }
+
+    if (ref.kind === "rail") {
+      // A rail's y is deliberately ignored — the whole rail, from topY to
+      // bottomY, is one continuous bus, so every point on it shares a key.
+      return `r:${ref.railId}`;
+    }
+
+    return `j:${ref.junctionId}`;
   }
 
   function buildNetlist(state) {

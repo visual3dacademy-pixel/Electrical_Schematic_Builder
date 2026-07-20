@@ -24,6 +24,7 @@
     id: "coil",
     category: "coil",
     label: "Coil",
+    designatorPrefix: "R",
     width: 150,
     height: 100,
     isCoil: true,
@@ -48,10 +49,15 @@
     }
   }
 
+  // Hidden from the palette (learners can't drag a bare one), but still
+  // registered — SPST/SPDT Relay compound placement (RELAY_PRESETS in
+  // ui/canvas-interactions.js) creates instances of these directly.
   Lib.register({
     id: "contact_no",
     category: "contact",
     label: "Contact (NO)",
+    designatorPrefix: "CR",
+    hiddenFromPalette: true,
     width: 150,
     height: 90,
     isSwitchLike: true,
@@ -72,6 +78,8 @@
     id: "contact_nc",
     category: "contact",
     label: "Contact (NC)",
+    designatorPrefix: "CR",
+    hiddenFromPalette: true,
     width: 150,
     height: 90,
     isSwitchLike: true,
@@ -85,54 +93,6 @@
     labelAnchor: { x: 0, y: -48 },
     draw(parent) {
       drawContactGlyph(parent, "NC");
-    }
-  });
-
-  function drawDelayArc(parent) {
-    D.path("M -22,-46 A 22,22 0 0 1 22,-46", {}, parent);
-  }
-
-  Lib.register({
-    id: "contact_no_delayed",
-    category: "contact",
-    label: "Timed Contact (NOTC)",
-    width: 150,
-    height: 100,
-    isSwitchLike: true,
-    isTimed: true,
-    variants: ["NO"],
-    defaultVariant: "NO",
-    deviceGroupCapable: true,
-    terminals: [
-      { id: "t1", x: -HALF_W, y: 0 },
-      { id: "t2", x: HALF_W, y: 0 }
-    ],
-    labelAnchor: { x: 0, y: -68 },
-    draw(parent) {
-      drawContactGlyph(parent, "NO");
-      drawDelayArc(parent);
-    }
-  });
-
-  Lib.register({
-    id: "contact_nc_delayed",
-    category: "contact",
-    label: "Timed Contact (NOTO)",
-    width: 150,
-    height: 100,
-    isSwitchLike: true,
-    isTimed: true,
-    variants: ["NC"],
-    defaultVariant: "NC",
-    deviceGroupCapable: true,
-    terminals: [
-      { id: "t1", x: -HALF_W, y: 0 },
-      { id: "t2", x: HALF_W, y: 0 }
-    ],
-    labelAnchor: { x: 0, y: -68 },
-    draw(parent) {
-      drawContactGlyph(parent, "NC");
-      drawDelayArc(parent);
     }
   });
 })();

@@ -36,15 +36,42 @@ body {
   overflow: hidden;
 }
 
-#circuitSvg {
+/*
+  #scrollArea fills the always-visible #stage viewport and scrolls
+  vertically once a low-voltage section pushes the circuit taller than it.
+  #circuitSvg is deliberately NOT height:100% here — with no width/height
+  attributes on the element itself, "width:100%; height:auto" makes the
+  browser derive its rendered height from the viewBox's own aspect ratio
+  (updated in JS whenever a section is added), so it naturally grows
+  taller than its scrollable container instead of being squashed to fit.
+*/
+#scrollArea {
   position: absolute;
   inset: 0;
-  width: 100%;
-  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+#circuitSvg {
   display: block;
-  z-index: 10;
+  width: 100%;
+  height: auto;
   touch-action: none;
   user-select: none;
+}
+
+/*
+  The palette is a separate SVG layered on top, outside #scrollArea, so it
+  stays fixed in place while the circuit content scrolls underneath it.
+*/
+#paletteSvg {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 13.5417%; /* Config.PALETTE_W / Config.VIEW_W */
+  height: 100%;
+  z-index: 15;
+  display: block;
 }
 
 #overlays {

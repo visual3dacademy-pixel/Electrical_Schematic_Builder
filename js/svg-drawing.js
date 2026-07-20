@@ -131,16 +131,11 @@
     svg.appendChild(defs);
   }
 
-  function drawBackground() {
-    rect(0, 0, C.VIEW_W || 1920, C.VIEW_H || 1080, {
-      fill: "#ffffff",
-      stroke: "none"
-    });
+  function drawBackground(height, parent) {
+    const totalHeight = height || C.VIEW_H || 1080;
 
-    rect(0, 0, C.VIEW_W || 1920, C.VIEW_H || 1080, {
-      fill: "url(#grid)",
-      stroke: "none"
-    });
+    rect(0, 0, C.VIEW_W || 1920, totalHeight, { fill: "#ffffff", stroke: "none" }, parent);
+    rect(0, 0, C.VIEW_W || 1920, totalHeight, { fill: "url(#grid)", stroke: "none" }, parent);
   }
 
   function line(x1, y1, x2, y2, options, parent) {
@@ -331,19 +326,6 @@
     return el;
   }
 
-  function drawRails() {
-    const leftRail = C.LEFT_RAIL || 160;
-    const rightRail = C.RIGHT_RAIL || 1760;
-    const topRailY = C.TOP_RAIL_Y || 140;
-    const bottomRailY = C.BOTTOM_RAIL_Y || 1000;
-
-    line(leftRail, topRailY, leftRail, bottomRailY, { stroke: "#111111", width: 6 });
-    line(rightRail, topRailY, rightRail, bottomRailY, { stroke: "#111111", width: 6 });
-
-    text(leftRail, topRailY - 30, "L1", 26, 900, "#111111");
-    text(rightRail, topRailY - 30, "L2", 26, 900, "#111111");
-  }
-
   function drawVersion() {
     text(
       (C.VIEW_W || 1920) - 90,
@@ -363,7 +345,6 @@
     group,
     drawDefs,
     drawBackground,
-    drawRails,
     line,
     polyline,
     wire,

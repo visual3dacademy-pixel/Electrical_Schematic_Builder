@@ -28,22 +28,34 @@
     }
   });
 
+  // Vertical, polarized-style capacitor — traced from Assets/SVG/Capacitor.svg
+  // (updated viewBox 38.96x84.69). Terminal centers there are (19.48,8.23)
+  // and (19.48,76.46); scale=150/(span 68.23)=2.1983 normalizes the
+  // terminal-to-terminal span to match the rest of the library.
   Lib.register({
     id: "capacitor",
     category: "passive",
     label: "Capacitor",
-    width: 150,
-    height: 70,
+    defaultLabel: "",
+    width: 70,
+    height: 170,
     terminals: [
-      { id: "t1", x: -75, y: 0 },
-      { id: "t2", x: 75, y: 0 }
+      { id: "t1", x: 0, y: -75 },
+      { id: "t2", x: 0, y: 75 }
     ],
-    labelAnchor: { x: 0, y: -38 },
+    labelAnchor: { x: 40, y: 0 },
     draw(parent) {
-      D.line(-75, 0, -8, 0, {}, parent);
-      D.line(8, 0, 75, 0, {}, parent);
-      D.line(-8, -25, -8, 25, {}, parent);
-      D.line(8, -25, 8, 25, {}, parent);
+      const g = D.group({ transform: "translate(-42.82,-93.09) scale(2.1983)" }, parent);
+      const sw = { width: 1.36 };
+
+      // Leads extended to the exact terminal centers (19.48,8.23) and
+      // (19.48,76.46) — the source art's own lines stop at the terminal
+      // circle's edge, leaving a radius-sized gap to the auto-rendered
+      // terminal dot (which is drawn at the center).
+      D.line(19.48, 76.46, 19.47, 49.98, sw, g);
+      D.line(19.47, 36.42, 19.48, 8.23, sw, g);
+      D.path("M.37,27.68c4.81,5.53,11.79,8.71,19.12,8.71s14.31-3.18,19.12-8.71", sw, g);
+      D.line(38.58, 49.98, .36, 49.98, sw, g);
     }
   });
 })();

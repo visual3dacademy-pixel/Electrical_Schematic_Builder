@@ -5,13 +5,21 @@
 
   window.ESB = window.ESB || {};
 
+  // Converts a browser pointer position to stage (design-space) coordinates.
+  // Uses the SVG's *live* viewBox dimensions, not the fixed Config.VIEW_W/H —
+  // once a low-voltage section is added, circuitSvg's viewBox grows taller
+  // than 1080 (see script.js's relayout()), so its on-screen rendered height
+  // no longer matches Config.VIEW_H. Dividing by the hardcoded constant
+  // instead of the real current height mapped every click in the lower
+  // portion of a tall canvas to a much smaller y — reading as "the wire/
+  // component landed way above where I clicked."
   function clientToStage(svgEl, clientX, clientY) {
-    const C = window.ESB.Config;
     const rect = svgEl.getBoundingClientRect();
+    const viewBox = svgEl.viewBox.baseVal;
 
     return {
-      x: ((clientX - rect.left) / rect.width) * C.VIEW_W,
-      y: ((clientY - rect.top) / rect.height) * C.VIEW_H
+      x: ((clientX - rect.left) / rect.width) * viewBox.width,
+      y: ((clientY - rect.top) / rect.height) * viewBox.height
     };
   }
 
@@ -83,7 +91,28 @@
       return junction ? { x: junction.x, y: junction.y } : null;
     }
 
+    if (ref.kind === "rail") {
+      const railX = window.ESB.Sections.getRailX(ref.railId);
+      return railX === null ? null : { x: railX, y: ref.y };
+    }
+
     return null;
+  }
+
+  // Nearest point on segment a-b to `point`, and the distance to it. Used
+  // to hit-test wire endpoints against a rail's full length, not just a
+  // single fixed point.
+  function distanceToSegment(point, a, b) {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lengthSquared = dx * dx + dy * dy;
+
+    let t = lengthSquared === 0 ? 0 : ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared;
+    t = Math.max(0, Math.min(1, t));
+
+    const closest = { x: a.x + t * dx, y: a.y + t * dy };
+
+    return { distance: distance(point, closest), point: closest };
   }
 
   // Two-segment orthogonal (Manhattan) routing between two points, the
@@ -94,7 +123,13 @@
       return [a, b];
     }
 
-    return [a, { x: b.x, y: a.y }, b];
+    // Vertical-first (bend at a.x/b.y), not horizontal-first: dragging
+    // from a component down to a rail or another component below it is
+    // the most common case, and this way the wire's path tracks the
+    // cursor's vertical movement immediately instead of leaving a
+    // horizontal segment sitting at the start's height for the whole
+    // drag (which reads as "disconnected from the cursor").
+    return [a, { x: a.x, y: b.y }, b];
   }
 
   window.ESB.Geometry = {
@@ -105,6 +140,7 @@
     distance,
     snapToGrid,
     resolveRefPoint,
-    orthogonalPath
+    orthogonalPath,
+    distanceToSegment
   };
 })();

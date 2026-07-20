@@ -1,6 +1,6 @@
-// Version 0.1
+// Version 0.2
 //
-// Placement/selection/move/rotate/delete interactions for instances on the
+// Placement/selection/move/delete interactions for instances on the
 // canvas, plus palette-to-canvas drag-and-drop. Wire drawing (Phase 3)
 // is a separate module layered on top of this one.
 
@@ -17,14 +17,37 @@
 
   const CANVAS_MARGIN = 20;
   const MIN_X = C.PALETTE_W + CANVAS_MARGIN;
+  const RELAY_ROW_OFFSET = 140;
+
+  // TSTAT Terminals bridging placement: how far below the low-voltage
+  // section's top the R row lands (leaving room for the rail's leg above
+  // it). No horizontal gap constant — the block's x is chosen so the R
+  // row's left terminal sits at exactly the rail's x, reading as the rail
+  // running straight into it rather than jogging over to reach it.
+  const TSTAT_R_OFFSET_Y = 150;
+
+  // Palette entries "SPST Relay"/"SPDT Relay" are placement *recipes*, not
+  // real SymbolTypes: dropping one creates a coil plus its NO (and, for
+  // SPDT, NC) contact together, sharing one auto-numbered "R" designator
+  // as both their label and deviceGroup — a real SymbolType to preview
+  // with in the palette/drag-ghost since neither has its own glyph.
+  const RELAY_PRESETS = {
+    relay_spst: { previewTypeId: "coil", contactTypeIds: ["contact_no"] },
+    relay_spdt: { previewTypeId: "coil", contactTypeIds: ["contact_no", "contact_nc"] }
+  };
 
   let dragMode = null; // null | "new-instance" | "move-instance"
   let dragData = null;
 
   function clampToCanvas(point) {
+    // Sections.getTotalHeight() grows once a low-voltage section exists —
+    // clamping to the fixed Config.VIEW_H would trap instances at the
+    // original 1080 boundary even though the canvas is now taller.
+    const totalHeight = window.ESB.Sections.getTotalHeight();
+
     return {
       x: Math.max(MIN_X, Math.min(C.VIEW_W - CANVAS_MARGIN, point.x)),
-      y: Math.max(CANVAS_MARGIN, Math.min(C.VIEW_H - CANVAS_MARGIN, point.y))
+      y: Math.max(CANVAS_MARGIN, Math.min(totalHeight - CANVAS_MARGIN, point.y))
     };
   }
 
@@ -66,7 +89,10 @@
         D.text(
           labelWorld.x,
           labelWorld.y,
-          instance.label || type.label,
+          // instance.label is always set at creation time (empty string is
+          // a deliberate choice for some types, e.g. capacitor) — no
+          // `|| type.label` fallback, since "" is falsy but valid here.
+          instance.label,
           15,
           700,
           "#1a2230",
@@ -116,12 +142,7 @@
 
     const toolbarY = instance.y - radius - 34;
 
-    drawToolbarButton(layer, instance.x - 30, toolbarY, "rotate", (btn) => {
-      D.path("M -9,-3 A 9,9 0 1 1 -9,3", { fill: "none", stroke: "#1a2230", width: 2.5 }, btn);
-      D.path("M -9,-8 L -9,3 L 2,3", { fill: "none", stroke: "#1a2230", width: 2.5 }, btn);
-    });
-
-    drawToolbarButton(layer, instance.x + 30, toolbarY, "delete", (btn) => {
+    drawToolbarButton(layer, instance.x, toolbarY, "delete", (btn) => {
       D.line(-7, -7, 7, 7, { stroke: "#c0392b", width: 2.5 }, btn);
       D.line(-7, 7, 7, -7, { stroke: "#c0392b", width: 2.5 }, btn);
     });
@@ -139,11 +160,54 @@
     btn.setAttribute("transform", `translate(${x},${y})`);
   }
 
+  // Shared by the toolbar delete button and the Delete/Backspace key: if
+  // the removed instance was bridging a section's rail (TSTAT Terminals),
+  // that rail's leg extends back to its normal length, so the canvas needs
+  // a relayout too — not just a re-render of instances/wires. Also
+  // refreshes the palette, since deleting the one TSTAT Terminals block
+  // un-greys its row again.
+  function deleteInstance(id) {
+    S.removeInstance(id);
+    const railRestored = window.ESB.Sections.releaseTstat(id);
+
+    renderInstances();
+    renderSelection();
+    window.ESB.Palette.render();
+
+    if (railRestored) {
+      window.ESB.relayout();
+    }
+  }
+
+  // Brief, self-dismissing message near the top of the stage — used for
+  // rejected placements (e.g. dropping TSTAT Terminals with no transformer
+  // on the canvas yet), where there's no instance/selection to attach a
+  // normal inline error to.
+  function showToast(message) {
+    const overlays = D.getElements().overlays;
+
+    const toast = document.createElement("div");
+    toast.textContent = message;
+    toast.style.cssText =
+      "position:absolute;left:50%;top:6%;transform:translateX(-50%);" +
+      "background:#2a3340;color:#ffffff;padding:12px 22px;border-radius:8px;" +
+      "font:700 15px Arial, Helvetica, sans-serif;box-shadow:0 8px 20px rgba(0,0,0,0.25);" +
+      "pointer-events:none;z-index:30;transition:opacity 0.3s ease;opacity:1;white-space:nowrap;";
+
+    overlays.appendChild(toast);
+
+    setTimeout(() => {
+      toast.style.opacity = "0";
+      setTimeout(() => toast.remove(), 300);
+    }, 2200);
+  }
+
   function renderDragGhost(point, typeId) {
     const layer = document.getElementById("dragPreviewLayer");
     D.clearGroup(layer);
 
-    const type = Lib.getType(typeId);
+    const preset = RELAY_PRESETS[typeId];
+    const type = Lib.getType(preset ? preset.previewTypeId : typeId);
     const isValid = point.x >= MIN_X;
 
     const ghost = D.group(
@@ -169,14 +233,8 @@
     const toolbarEl = target.closest("[data-toolbar-action]");
     if (toolbarEl) {
       const selected = S.getSelected();
-      if (selected) {
-        if (toolbarEl.dataset.toolbarAction === "rotate") {
-          S.rotateInstance(selected.id, 90);
-        } else if (toolbarEl.dataset.toolbarAction === "delete") {
-          S.removeInstance(selected.id);
-        }
-        renderInstances();
-        renderSelection();
+      if (selected && toolbarEl.dataset.toolbarAction === "delete") {
+        deleteInstance(selected.id);
       }
       event.preventDefault();
       return;
@@ -218,6 +276,16 @@
   }
 
   function applyMove(point) {
+    const instance = S.getInstance(dragData.instanceId);
+
+    // fixedPosition (e.g. TSTAT Terminals, auto-bridged to the 24V rail):
+    // selectable and deletable like any instance, but never repositioned.
+    if (instance && instance.fixedPosition) {
+      renderInstances();
+      renderSelection();
+      return;
+    }
+
     const dx = point.x - dragData.pointerStartX;
     const dy = point.y - dragData.pointerStartY;
 
@@ -232,7 +300,13 @@
       y: G.snapToGrid(clamped.y, C.PLACEMENT_GRID)
     };
 
-    S.moveInstance(dragData.instanceId, snapped.x, snapped.y);
+    const type = instance && Lib.getType(instance.typeId);
+
+    // lockVertical (e.g. the transformer, which must stay bridging its two
+    // rails): horizontal drag only, Y stays exactly where it started.
+    const finalY = type && type.lockVertical ? dragData.instanceStartY : snapped.y;
+
+    S.moveInstance(dragData.instanceId, snapped.x, finalY);
     renderInstances();
     renderSelection();
   }
@@ -266,8 +340,87 @@
           y: G.snapToGrid(point.y, C.PLACEMENT_GRID)
         };
 
-        const instance = S.createInstance(dragData.typeId, snapped.x, snapped.y);
-        S.select(instance.id);
+        const preset = RELAY_PRESETS[dragData.typeId];
+
+        if (preset) {
+          const designator = S.nextDesignator("R");
+          const coil = S.createInstance(preset.previewTypeId, snapped.x, snapped.y, {
+            label: designator,
+            deviceGroup: designator
+          });
+
+          preset.contactTypeIds.forEach((contactTypeId, index) => {
+            const contactPoint = clampToCanvas({
+              x: snapped.x,
+              y: snapped.y + RELAY_ROW_OFFSET * (index + 1)
+            });
+
+            S.createInstance(contactTypeId, contactPoint.x, contactPoint.y, {
+              label: designator,
+              deviceGroup: designator
+            });
+          });
+
+          S.select(coil.id);
+        } else if (dragData.typeId === "transformer" && !window.ESB.Sections.hasLowVoltageSection()) {
+          // First transformer placed: snap it to bridge the main ladder's
+          // bottom rail and a newly-created low-voltage section's top
+          // rail (H1/H2 and X1/X2 are exactly Config.SECTION_GAP/2 apart
+          // from the instance's own origin). Only the initial placement
+          // is special-cased — once a low-voltage section exists, later
+          // transformers (and this one, afterward) behave like any other
+          // freely-draggable instance.
+          const main = window.ESB.Sections.getById("main");
+          window.ESB.Sections.addLowVoltageSection();
+          window.ESB.relayout();
+
+          const bridgeX = G.snapToGrid((main.leftX + main.rightX) / 2, C.PLACEMENT_GRID);
+          const bridgeY = main.bottomY + C.SECTION_GAP / 2;
+
+          const instance = S.createInstance("transformer", bridgeX, bridgeY);
+          S.select(instance.id);
+        } else if (dragData.typeId === "thermostat_block") {
+          // TSTAT Terminals requires 24VAC to exist at all — without a
+          // transformer there's no low-voltage section/rail for it to
+          // bridge to, so the drop is rejected outright rather than
+          // placing a disconnected block.
+          if (!window.ESB.Sections.hasLowVoltageSection()) {
+            showToast("A transformer is required to add this component.");
+          } else if (!window.ESB.Sections.getById("lowVoltage").tstatInstanceId) {
+            // Fixed position bridging the low-voltage section's 24V rail
+            // directly to the R row, same "auto-bridge on first placement"
+            // idea as the transformer. Only one TSTAT Terminals block is
+            // ever allowed (see ui/palette.js, which greys the row out
+            // once one exists), so this branch's guard should always hold
+            // whenever the palette let the drag start in the first place.
+            const lowSection = window.ESB.Sections.getById("lowVoltage");
+            const rTerminalY = lowSection.topY + TSTAT_R_OFFSET_Y;
+            // R row's left terminal (local x -95) lands exactly on the
+            // rail's own x — the rail reads as running straight into it,
+            // not jogging sideways to reach it.
+            const instanceX = lowSection.leftX + 95;
+            const instanceY = rTerminalY + 150; // -BLOCK_TOP for the 6-row block, matching symbols-hvac-inputs.js
+
+            const instance = S.createInstance("thermostat_block", instanceX, instanceY, {
+              fixedPosition: true
+            });
+
+            S.createWire(
+              { kind: "rail", railId: lowSection.leftRailId, y: rTerminalY },
+              { kind: "terminal", instanceId: instance.id, terminalId: "r_l" }
+            );
+
+            window.ESB.Sections.attachTstat("lowVoltage", instance.id, rTerminalY);
+            window.ESB.relayout();
+            window.ESB.Palette.render();
+
+            S.select(instance.id);
+          }
+        } else {
+          const instance = S.createInstance(dragData.typeId, snapped.x, snapped.y);
+          S.select(instance.id);
+        }
+
         renderInstances();
         renderSelection();
       }
@@ -302,25 +455,19 @@
       return;
     }
 
-    if (event.key === "r" || event.key === "R") {
-      S.rotateInstance(selected.id, 90);
-      renderInstances();
-      renderSelection();
-      event.preventDefault();
-    }
-
     if (event.key === "Delete" || event.key === "Backspace") {
-      S.removeInstance(selected.id);
-      renderInstances();
-      renderSelection();
+      deleteInstance(selected.id);
       event.preventDefault();
     }
   }
 
   function init() {
-    const svg = D.getElements().svg;
+    // Listens on #stage, not circuitSvg — the palette lives in its own
+    // separate paletteSvg sibling (see styles.css), so a listener on
+    // circuitSvg alone would never see palette clicks/drags.
+    const stage = D.getElements().stage;
 
-    svg.addEventListener("pointerdown", onPointerDown);
+    stage.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
     window.addEventListener("keydown", onKeyDown);

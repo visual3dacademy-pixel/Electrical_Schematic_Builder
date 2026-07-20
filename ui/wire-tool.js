@@ -58,6 +58,29 @@
       }
     });
 
+    // Rails are buses, not fixed points — hit-test the whole length of
+    // each one so a wire can land anywhere along it, not just at its ends.
+    window.ESB.Sections.getAll().forEach((section) => {
+      [
+        { railId: section.leftRailId, x: section.leftX, bottomY: section.leftRailBottomY || section.bottomY },
+        { railId: section.rightRailId, x: section.rightX, bottomY: section.bottomY }
+      ].forEach((rail) => {
+        const hit = G.distanceToSegment(
+          point,
+          { x: rail.x, y: section.topY },
+          { x: rail.x, y: rail.bottomY }
+        );
+
+        if (hit.distance <= bestDist) {
+          bestDist = hit.distance;
+          best = {
+            ref: { kind: "rail", railId: rail.railId, y: hit.point.y },
+            point: hit.point
+          };
+        }
+      });
+    });
+
     return best;
   }
 
@@ -98,6 +121,19 @@
 
     S.state.junctions.forEach((junction) => {
       D.circle(junction.x, junction.y, 6, { fill: "#111111", stroke: "none" }, layer);
+
+      // A junction is a valid wire-start point same as any terminal (see
+      // allConnectionPoints), but without this, hovering it shows the
+      // wire's own pointer cursor (its fat hit-path's rounded cap reaches
+      // slightly past the visible dot) instead of crosshair — drawn last
+      // so it wins the hit-test within its radius.
+      D.circle(
+        junction.x,
+        junction.y,
+        C.TERMINAL_HIT_RADIUS,
+        { fill: "transparent", stroke: "none", style: "cursor:crosshair;" },
+        layer
+      );
     });
   }
 
@@ -158,6 +194,12 @@
     dragMode = "drawing-wire";
     dragData = { startRef: hit.ref, startPoint: hit.point };
     renderPreview(hit.point, hit.point, true);
+
+    // Without this, the cursor reverts to whatever's under the pointer
+    // mid-drag (grab over a component body, default over blank canvas) —
+    // forcing it here keeps the crosshair for the whole gesture, so it
+    // reads as "drawing a wire" the entire time, not just at the start.
+    document.body.style.cursor = "crosshair";
   }
 
   function onPointerMove(event) {
@@ -202,6 +244,7 @@
     clearPreview();
     dragMode = null;
     dragData = null;
+    document.body.style.cursor = "";
 
     renderWires();
     window.ESB.CanvasInteractions.renderSelection();
@@ -217,6 +260,10 @@
         window.ESB.CanvasInteractions.renderSelection();
       }
       event.preventDefault();
+      // Stops canvas-interactions.js's own bubble-phase handler (now on
+      // the ancestor #stage, so it fires *after* this one) from treating
+      // the click as "nothing matched" and clearing what we just did.
+      event.stopPropagation();
       return;
     }
 
@@ -228,6 +275,7 @@
     S.selectWire(wireEl.dataset.wireId);
     renderWires();
     window.ESB.CanvasInteractions.renderSelection();
+    event.stopPropagation();
   }
 
   function init() {

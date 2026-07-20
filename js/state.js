@@ -22,11 +22,33 @@
     wires: [],
     junctions: [],
     selectedId: null,
-    selectedWireId: null
+    selectedWireId: null,
+    designatorCounters: {}
   };
 
-  function createInstance(typeId, x, y) {
+  // Returns the next auto-incrementing designator for a prefix (e.g. "LIM1",
+  // then "LIM2", ...). A shared counter (e.g. "R" for relay coils and their
+  // contacts) is what lets a compound placement label every piece to match.
+  function nextDesignator(prefix) {
+    const current = state.designatorCounters[prefix] || 0;
+    const next = current + 1;
+    state.designatorCounters[prefix] = next;
+    return `${prefix}${next}`;
+  }
+
+  function createInstance(typeId, x, y, overrides) {
     const type = window.ESB.SymbolLibrary.getType(typeId);
+    const opts = overrides || {};
+
+    // type.label is the palette's display name; type.defaultLabel (when
+    // present) is what a fresh instance shows on-canvas instead of it —
+    // e.g. the capacitor's palette row still reads "Capacitor" but a
+    // placed instance starts with no designator text at all.
+    const label = opts.label !== undefined
+      ? opts.label
+      : (type.designatorPrefix
+        ? nextDesignator(type.designatorPrefix)
+        : (type.defaultLabel !== undefined ? type.defaultLabel : type.label));
 
     const instance = {
       id: generateId("inst"),
@@ -35,11 +57,16 @@
       y,
       rotation: 0,
       mirrored: false,
-      label: type.label,
+      label,
       variant: type.defaultVariant || null,
-      deviceGroup: null,
-      params: {},
-      locked: false
+      deviceGroup: opts.deviceGroup !== undefined ? opts.deviceGroup : null,
+      params: Object.assign({}, type.defaultParams),
+      locked: false,
+      // Distinct from `locked` (which also blocks deletion) — an instance
+      // placed by an automatic bridging recipe (e.g. TSTAT Terminals to
+      // the 24V rail) that must stay exactly where it was placed, but can
+      // still be selected and deleted normally.
+      fixedPosition: !!opts.fixedPosition
     };
 
     state.instances.push(instance);
@@ -60,13 +87,42 @@
     state.instances = state.instances.filter((candidate) => candidate.id !== id);
 
     // Any wire touching this instance's terminals is no longer valid.
-    state.wires = state.wires.filter((wire) => {
-      return !refTouchesInstance(wire.a, id) && !refTouchesInstance(wire.b, id);
+    const removedWires = state.wires.filter((wire) => {
+      return refTouchesInstance(wire.a, id) || refTouchesInstance(wire.b, id);
     });
+    state.wires = state.wires.filter((wire) => removedWires.indexOf(wire) === -1);
 
     if (state.selectedId === id) {
       state.selectedId = null;
     }
+
+    pruneOrphanedJunctions(removedWires);
+  }
+
+  // A junction only exists to join wires together — once the last wire
+  // touching one is gone (deleted directly, or because it was attached to
+  // an instance that just got removed), the junction's dot has nothing
+  // left to represent and should disappear along with it.
+  function pruneOrphanedJunctions(removedWires) {
+    const candidateJunctionIds = [];
+
+    removedWires.forEach((wire) => {
+      [wire.a, wire.b].forEach((ref) => {
+        if (ref && ref.kind === "junction" && candidateJunctionIds.indexOf(ref.junctionId) === -1) {
+          candidateJunctionIds.push(ref.junctionId);
+        }
+      });
+    });
+
+    candidateJunctionIds.forEach((junctionId) => {
+      const stillInUse = state.wires.some((wire) => {
+        return refTouchesJunction(wire.a, junctionId) || refTouchesJunction(wire.b, junctionId);
+      });
+
+      if (!stillInUse) {
+        state.junctions = state.junctions.filter((junction) => junction.id !== junctionId);
+      }
+    });
   }
 
   function createJunction(x, y) {
@@ -116,10 +172,15 @@
   }
 
   function removeWire(id) {
-    state.wires = state.wires.filter((wire) => wire.id !== id);
+    const wire = getWire(id);
+    state.wires = state.wires.filter((candidate) => candidate.id !== id);
 
     if (state.selectedWireId === id) {
       state.selectedWireId = null;
+    }
+
+    if (wire) {
+      pruneOrphanedJunctions([wire]);
     }
   }
 
@@ -166,6 +227,7 @@
   window.ESB.State = {
     state,
     generateId,
+    nextDesignator,
     createInstance,
     getInstance,
     removeInstance,
