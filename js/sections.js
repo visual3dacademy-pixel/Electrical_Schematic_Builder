@@ -117,9 +117,79 @@
     return section;
   }
 
+  // Undoes addLowVoltageSection — called when the transformer bridging it
+  // to the main ladder is deleted (see canvas-interactions.js's
+  // deleteInstance), since nothing can legitimately be wired to a 24V/C
+  // rail that no longer bridges to any real transformer. The canvas
+  // shrinks back down (getTotalHeight) the moment this runs.
+  function removeLowVoltageSection() {
+    const index = sections.findIndex((section) => section.id === "lowVoltage");
+    if (index !== -1) {
+      sections.splice(index, 1);
+    }
+  }
+
   function getTotalHeight() {
     const last = sections[sections.length - 1];
     return Math.max(C.VIEW_H, last.bottomY + 80);
+  }
+
+  // Fixed number of evenly-spaced horizontal "wire rows" available in each
+  // section's own vertical span — a dedicated snap grid for wires and
+  // component placement, coarser than Config.PLACEMENT_GRID, so a run of
+  // wires/components down the ladder lines up onto a small, predictable
+  // set of rows instead of landing at any arbitrary Y. For "main", the
+  // span starts below the built-in circuit breakers (getRailBounds
+  // already accounts for their carve-out), not at the section's own
+  // topY — there's nothing to wire above the breakers anyway. Every other
+  // section (lowVoltage) has no such carve-out, so its full topY..bottomY
+  // span is used directly.
+  const ROW_COUNT = 30;
+
+  function getSnapRows(section) {
+    const startY = getRailBounds(section, "left").topY;
+    const endY = section.bottomY;
+    const spacing = (endY - startY) / ROW_COUNT;
+
+    const rows = [];
+    for (let i = 1; i <= ROW_COUNT; i += 1) {
+      rows.push(startY + spacing * i);
+    }
+    return rows;
+  }
+
+  // The low-voltage section always mirrors the main section's own raw
+  // topY..bottomY span (see addLowVoltageSection — its rail length copies
+  // "previous.bottomY - previous.topY" exactly), and has no breaker-style
+  // carve-out at its top the way main does. Its row spacing is therefore
+  // fully determined by Config alone — computable even before the section
+  // itself exists, which is what lets the TSTAT Terminals symbol (built
+  // and registered at page load, long before any transformer creates a
+  // low-voltage section) size its own six rows to land exactly on this
+  // same grid.
+  function getLowVoltageRowSpacing() {
+    return (C.BOTTOM_RAIL_Y - C.TOP_RAIL_Y) / ROW_COUNT;
+  }
+
+  // Nearest snap row across every section — sections never overlap in Y
+  // (each new one starts Config.SECTION_GAP below the last), so a plain
+  // global nearest-of-all-rows search is equivalent to picking the right
+  // section first and is simpler than routing by Y range.
+  function getNearestRowY(y) {
+    let best = y;
+    let bestDist = Infinity;
+
+    sections.forEach((section) => {
+      getSnapRows(section).forEach((rowY) => {
+        const dist = Math.abs(rowY - y);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = rowY;
+        }
+      });
+    });
+
+    return best;
   }
 
   // Effective rendered/hit-tested span of one rail — defaults to the
@@ -185,6 +255,20 @@
 
       D.text(section.leftX, labelY, section.leftLabel, 26, 900, "#111111", {}, parent);
       D.text(section.rightX, labelY, section.rightLabel, 26, 900, "#111111", {}, parent);
+
+      // Faint full-width guide line at every snap row, so where a wire or
+      // component will land is visible before it's dropped, not just felt
+      // as an invisible snap. Drawn last (within this section's own
+      // pass) so it sits under nothing wire/instance-related that's
+      // rendered into later layers, but still reads clearly against the
+      // grid background.
+      getSnapRows(section).forEach((rowY) => {
+        D.line(
+          section.leftX, rowY, section.rightX, rowY,
+          { stroke: "#d3dae3", width: 1, "stroke-dasharray": "4 4" },
+          parent
+        );
+      });
     });
   }
 
@@ -194,11 +278,15 @@
     getRailX,
     hasLowVoltageSection,
     addLowVoltageSection,
+    removeLowVoltageSection,
     attachTstat,
     releaseTstat,
     getRailBounds,
     setRailTopOverride,
     getTotalHeight,
+    getSnapRows,
+    getNearestRowY,
+    getLowVoltageRowSpacing,
     renderAll
   };
 })();

@@ -69,7 +69,11 @@
       // placed by an automatic bridging recipe (e.g. TSTAT Terminals to
       // the 24V rail) that must stay exactly where it was placed, but can
       // still be selected and deleted normally.
-      fixedPosition: !!opts.fixedPosition
+      fixedPosition: !!opts.fixedPosition,
+      // Canvas ID: "idu" or "odu" for dual-canvas modes, null for single-canvas
+      canvasId: opts.canvasId || null,
+      // Relay group: for tracking coils and their associated contacts
+      relayGroup: opts.relayGroup || null
     };
 
     state.instances.push(instance);
@@ -128,8 +132,12 @@
     });
   }
 
-  function createJunction(x, y) {
-    const junction = { id: generateId("junc"), x, y };
+  // canvasId scopes a junction to "idu"/"odu" (or null/shared, same
+  // convention as an instance's own canvasId) so IDU and ODU stay
+  // independent circuits — a junction created while wiring in one must
+  // never be visible, or snap-onto-able, from the other.
+  function createJunction(x, y, canvasId) {
+    const junction = { id: generateId("junc"), x, y, canvasId: canvasId || null };
     state.junctions.push(junction);
     return junction;
   }
@@ -159,13 +167,28 @@
       return false;
     }
 
-    return a.kind === "terminal"
-      ? a.instanceId === b.instanceId && a.terminalId === b.terminalId
-      : a.junctionId === b.junctionId;
+    if (a.kind === "terminal") {
+      return a.instanceId === b.instanceId && a.terminalId === b.terminalId;
+    }
+
+    // Rails carry no junctionId (they're a bus, not a discrete point) — the
+    // pre-existing "else" branch below compared a.junctionId === b.junctionId
+    // for anything that wasn't a terminal, which left two DIFFERENT rail
+    // refs (different railId and/or y) both undefined and so, wrongly,
+    // "equal" to each other.
+    if (a.kind === "rail") {
+      return a.railId === b.railId && Math.abs(a.y - b.y) < 0.5;
+    }
+
+    return a.junctionId === b.junctionId;
   }
 
-  function createWire(a, b) {
-    const wire = { id: generateId("wire"), a, b };
+  // canvasId scopes a wire to "idu"/"odu" (or null/shared) — same
+  // convention as an instance's own canvasId. This is what makes IDU and
+  // ODU genuinely independent circuits: a wire drawn while in one must
+  // never render, or be connectable to, from the other.
+  function createWire(a, b, canvasId) {
+    const wire = { id: generateId("wire"), a, b, canvasId: canvasId || null };
     state.wires.push(wire);
     return wire;
   }

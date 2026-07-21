@@ -19,17 +19,37 @@
   const MIN_X = C.PALETTE_W + CANVAS_MARGIN;
   const RELAY_ROW_OFFSET = 140;
 
+  // The canvasId a NEW wire/junction should be tagged with, given the
+  // current mode — mirrors wire-tool.js's own currentCanvasId (duplicated
+  // rather than shared, since neither module exposes internals to the
+  // other beyond WireTool's small public API).
+  function currentCanvasId() {
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    return mode === "idu" || mode === "odu" ? mode : null;
+  }
+
+  // Whether an existing wire/junction/instance's canvasId should be
+  // visible/usable in the CURRENT mode — build/check show everything
+  // unfiltered; only IDU/ODU actually scope down to their own circuit.
+  function visibleInCurrentMode(canvasId) {
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    if (mode !== "idu" && mode !== "odu") {
+      return true;
+    }
+    return !canvasId || canvasId === mode;
+  }
+
   // TSTAT Terminals bridging placement: how far below the low-voltage
   // section's top the R row lands (leaving room for the rail's leg above
   // it). No horizontal gap constant — the block's x is chosen so the R
   // row's left terminal sits at exactly the rail's x, reading as the rail
-  // running straight into it rather than jogging over to reach it. Must be
-  // a multiple of Config.PLACEMENT_GRID (20) — every row is ROW_H (60,
-  // itself a 20-multiple) below the last, so once the R row lands exactly
-  // on the grid, every other row does too, and any component the learner
-  // drags toward one can snap to it exactly instead of landing 10 units
-  // off (which is what 150 — not a multiple of 20 — used to cause).
-  const TSTAT_R_OFFSET_Y = 160;
+  // running straight into it rather than jogging over to reach it. Six
+  // grid intervals (Sections.getLowVoltageRowSpacing) rather than a fixed
+  // pixel offset — every other row below is also spaced by exact grid
+  // multiples (see symbols-hvac-inputs.js's ROW_H), so once R lands on a
+  // real snap row, G/Y/W1/O-B/C all land on their own rows too, instead of
+  // drifting between lines the way a fixed 160px offset did.
+  const TSTAT_R_OFFSET_Y = window.ESB.Sections.getLowVoltageRowSpacing() * 6;
 
   // Terminal-to-terminal distance (world units) within which a dragged
   // component's terminal is considered to be "landed on" another
@@ -116,6 +136,17 @@
       // Circuit mode — they're created once and persist in state.instances
       // regardless of mode, just not rendered outside it.
       if (type.pivotAtTip && mode !== "check") {
+        return;
+      }
+
+      // In split mode, skip rendering here (rendered separately in mode.js)
+      if (mode === "split") {
+        return;
+      }
+
+      // Filter instances by canvas ID in IDU/ODU single-screen modes
+      // Show instances that either have no canvasId (shared) or match the current canvas
+      if ((mode === "idu" || mode === "odu") && instance.canvasId && instance.canvasId !== mode) {
         return;
       }
 
@@ -234,17 +265,114 @@
   // a relayout too — not just a re-render of instances/wires. Also
   // refreshes the palette, since deleting the one TSTAT Terminals block
   // un-greys its row again.
-  function deleteInstance(id) {
+  // Everything wired below the transformer only exists *because* the
+  // low-voltage section it bridges to exists (TSTAT Terminals, anything
+  // wired to its 24V/C rails) — once that bridge is gone there's nothing
+  // legitimate left for any of it to connect to, so it all goes with it.
+  // Identified by Y position (>= the section's own topY) rather than by
+  // canvasId or wire-tracing, since components placed there aren't
+  // otherwise marked as "belonging" to the section in any other way.
+  function cascadeDeleteLowVoltageSection() {
+    const lowSection = window.ESB.Sections.getById("lowVoltage");
+    if (!lowSection) {
+      return;
+    }
+
+    const cutoffY = lowSection.topY - 1;
+
+    S.state.instances
+      .filter((instance) => instance.y >= cutoffY)
+      .forEach((instance) => S.removeInstance(instance.id));
+
+    window.ESB.Sections.removeLowVoltageSection();
+  }
+
+  // Modal warning before an irreversible cascade (deleting a transformer
+  // takes the whole low-voltage section — and everything wired into it —
+  // with it). A plain confirm() would work too, but this matches the
+  // rest of the app's own styled-overlay look instead of a jarring native
+  // browser dialog.
+  function showConfirmModal(message, onConfirm) {
+    const overlays = D.getElements().overlays;
+
+    const backdrop = document.createElement("div");
+    backdrop.style.cssText =
+      "position:absolute;inset:0;background:rgba(20,26,35,0.45);z-index:40;" +
+      "display:flex;align-items:center;justify-content:center;";
+
+    const box = document.createElement("div");
+    box.style.cssText =
+      "background:#ffffff;border-radius:10px;padding:24px 28px;max-width:360px;" +
+      "text-align:center;box-shadow:0 12px 32px rgba(0,0,0,0.3);";
+
+    const text = document.createElement("p");
+    text.textContent = message;
+    text.style.cssText =
+      "margin:0 0 20px 0;font:600 15px/1.4 Arial, Helvetica, sans-serif;color:#2a3340;";
+
+    const btnRow = document.createElement("div");
+    btnRow.style.cssText = "display:flex;gap:12px;justify-content:center;";
+
+    const yesBtn = document.createElement("button");
+    yesBtn.type = "button";
+    yesBtn.textContent = "Yes";
+    yesBtn.style.cssText =
+      "padding:9px 24px;border:none;border-radius:6px;background:#c0392b;color:#ffffff;" +
+      "font:700 14px Arial, Helvetica, sans-serif;cursor:pointer;";
+
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.textContent = "Cancel";
+    cancelBtn.style.cssText =
+      "padding:9px 24px;border:none;border-radius:6px;background:#e2e6ec;color:#2a3340;" +
+      "font:700 14px Arial, Helvetica, sans-serif;cursor:pointer;";
+
+    yesBtn.addEventListener("click", () => {
+      backdrop.remove();
+      onConfirm();
+    });
+    cancelBtn.addEventListener("click", () => backdrop.remove());
+
+    btnRow.appendChild(yesBtn);
+    btnRow.appendChild(cancelBtn);
+    box.appendChild(text);
+    box.appendChild(btnRow);
+    backdrop.appendChild(box);
+    overlays.appendChild(backdrop);
+  }
+
+  function performDelete(id) {
+    const instance = S.getInstance(id);
+    const isTransformer = !!(instance && instance.typeId === "transformer");
+
     S.removeInstance(id);
     const railRestored = window.ESB.Sections.releaseTstat(id);
+
+    if (isTransformer) {
+      cascadeDeleteLowVoltageSection();
+    }
 
     renderInstances();
     renderSelection();
     window.ESB.Palette.render();
 
-    if (railRestored) {
+    if (railRestored || isTransformer) {
       window.ESB.relayout();
     }
+  }
+
+  function deleteInstance(id) {
+    const instance = S.getInstance(id);
+
+    if (instance && instance.typeId === "transformer") {
+      showConfirmModal(
+        "Deleting the transformer will also delete the low-voltage section and everything wired into it below. Continue?",
+        () => performDelete(id)
+      );
+      return;
+    }
+
+    performDelete(id);
   }
 
   // Brief, self-dismissing message near the top of the stage — used for
@@ -270,13 +398,71 @@
     }, 2200);
   }
 
-  function renderDragGhost(point, typeId) {
-    const layer = document.getElementById("dragPreviewLayer");
+  // Split mode renders IDU/ODU as two independent SVGs (each its own
+  // 0-1920/0-1080 coordinate space), not one shared circuitSvg — so every
+  // pointer handler needs to know which of the two the cursor is currently
+  // over (or the single shared circuitSvg, outside split mode) before it
+  // can convert client coordinates or know which canvasId a new/moved
+  // instance belongs to.
+  function getCanvasContext(event) {
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+
+    if (mode === "split") {
+      const iduContainer = document.getElementById("iduCanvasContainer");
+      const oduContainer = document.getElementById("oduCanvasContainer");
+
+      if (iduContainer && event.target && iduContainer.contains(event.target)) {
+        return { svg: document.getElementById("iduCircuitSvg"), canvasId: "idu" };
+      }
+      if (oduContainer && event.target && oduContainer.contains(event.target)) {
+        return { svg: document.getElementById("oduCircuitSvg"), canvasId: "odu" };
+      }
+      return { svg: null, canvasId: null };
+    }
+
+    return {
+      svg: D.getElements().svg,
+      canvasId: mode === "idu" || mode === "odu" ? mode : null
+    };
+  }
+
+  // Split canvases have no palette overlapping them (unlike the shared
+  // circuitSvg, which starts at MIN_X past the palette strip) and no
+  // Sections-derived total height — clamp to their own fixed 1920x1080
+  // box with a plain margin instead of reusing clampToCanvas.
+  function clampToSplitCanvas(point) {
+    return {
+      x: Math.max(CANVAS_MARGIN, Math.min(C.VIEW_W - CANVAS_MARGIN, point.x)),
+      y: Math.max(CANVAS_MARGIN, Math.min(C.VIEW_H - CANVAS_MARGIN, point.y))
+    };
+  }
+
+  function ensureDragPreviewLayer(canvasId) {
+    if (!canvasId) {
+      return document.getElementById("dragPreviewLayer");
+    }
+
+    const svgEl = document.getElementById(canvasId === "idu" ? "iduCircuitSvg" : "oduCircuitSvg");
+    if (!svgEl) {
+      return null;
+    }
+
+    const layerId = `${canvasId}DragPreviewLayer`;
+    return document.getElementById(layerId) || D.group({ id: layerId }, svgEl);
+  }
+
+  function renderDragGhost(point, typeId, canvasId) {
+    const layer = ensureDragPreviewLayer(canvasId);
+    if (!layer) {
+      return;
+    }
     D.clearGroup(layer);
 
     const preset = RELAY_PRESETS[typeId];
     const type = Lib.getType(preset ? preset.previewTypeId : typeId);
-    const isValid = point.x >= MIN_X;
+    // canvasId set means we're in a self-contained split panel with no
+    // palette to stay clear of — always valid there.
+    const isValid = canvasId ? true : point.x >= MIN_X;
 
     const ghost = D.group(
       {
@@ -292,12 +478,28 @@
 
   function clearDragGhost() {
     D.clearGroup(document.getElementById("dragPreviewLayer"));
+
+    const iduLayer = document.getElementById("iduDragPreviewLayer");
+    if (iduLayer) {
+      D.clearGroup(iduLayer);
+    }
+
+    const oduLayer = document.getElementById("oduDragPreviewLayer");
+    if (oduLayer) {
+      D.clearGroup(oduLayer);
+    }
   }
 
   function onPointerDown(event) {
-    const svg = D.getElements().svg;
+    const context = getCanvasContext(event);
+    const svg = context.svg;
     const target = event.target;
     const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+
+    // In split mode, only allow component placement/movement, no wiring or meter interactions
+    if (mode === "split" && !target.closest("[data-palette-type]") && !target.closest("[data-instance-id]")) {
+      return;
+    }
 
     const toolbarEl = target.closest("[data-toolbar-action]");
     if (toolbarEl) {
@@ -321,13 +523,32 @@
       return;
     }
 
-    if (mode === "build") {
+    // Component placement/movement is allowed in every canvas-editing mode
+    // (build, the two single-canvas modes, and split) — only "check" keeps
+    // the built circuit read-only (aside from the pivotAtTip probe leads).
+    const canEditInstances = mode === "build" || mode === "idu" || mode === "odu" || mode === "split";
+
+    if (canEditInstances) {
       const paletteEl = target.closest("[data-palette-type]");
       if (paletteEl) {
         dragMode = "new-instance";
         dragData = { typeId: paletteEl.dataset.paletteType };
-        const point = G.clientToStage(svg, event.clientX, event.clientY);
-        renderDragGhost(point, dragData.typeId);
+
+        // In split mode, a palette pointerdown has no svg yet (the palette
+        // sits outside both canvas panels) — the first pointermove that
+        // lands over a panel supplies the context and ghost instead.
+        if (svg) {
+          const point = G.clientToStage(svg, event.clientX, event.clientY);
+          // The ghost layer lookup only cares which literal split-panel SVG
+          // to draw into — a concept that only exists in split mode itself.
+          // Outside split mode there's a single shared circuitSvg (and a
+          // single dragPreviewLayer already inside it), even though
+          // context.canvasId is "idu"/"odu" there too (for instance
+          // tagging, not panel lookup) — passing it through unconditionally
+          // sent renderDragGhost hunting for a nonexistent "iduCircuitSvg"/
+          // "oduCircuitSvg" element, so the ghost silently never rendered.
+          renderDragGhost(point, dragData.typeId, mode === "split" ? context.canvasId : null);
+        }
         event.preventDefault();
         return;
       }
@@ -339,7 +560,8 @@
 
       if (instance) {
         const type = Lib.getType(instance.typeId);
-        const point = G.clientToStage(svg, event.clientX, event.clientY);
+        const activeSvg = svg || D.getElements().svg;
+        const point = G.clientToStage(activeSvg, event.clientX, event.clientY);
 
         if (type.pivotAtTip) {
           // Check Circuit only (see renderInstances — leads aren't even
@@ -356,7 +578,7 @@
           return;
         }
 
-        if (mode === "build") {
+        if (canEditInstances) {
           S.select(instance.id);
           renderSelection();
 
@@ -386,7 +608,7 @@
       return;
     }
 
-    if (mode === "build") {
+    if (canEditInstances) {
       S.select(null);
       renderSelection();
     }
@@ -413,6 +635,11 @@
       if (other.id === excludeInstanceId) {
         return;
       }
+      // IDU/ODU are independent circuits — a component in one must never
+      // auto-wire to a component that only exists in the other.
+      if (!visibleInCurrentMode(other.canvasId)) {
+        return;
+      }
 
       const type = Lib.getType(other.typeId);
       type.terminals.forEach((terminal) => {
@@ -422,6 +649,45 @@
         if (d <= bestDist) {
           bestDist = d;
           best = { kind: "terminal", instanceId: other.id, terminalId: terminal.id };
+        }
+      });
+    });
+
+    // An existing wire's free end is a junction, not a component terminal
+    // — without this, dragging a component's terminal onto one and
+    // separating never registered as "touching" anything, so it couldn't
+    // auto-wire the way touching another component's terminal does.
+    S.state.junctions.forEach((junction) => {
+      if (!visibleInCurrentMode(junction.canvasId)) {
+        return;
+      }
+
+      const d = G.distance(worldPoint, { x: junction.x, y: junction.y });
+      if (d <= bestDist) {
+        bestDist = d;
+        best = { kind: "junction", junctionId: junction.id };
+      }
+    });
+
+    // Same idea for a bare rail (L1/L2/24V/C) with nothing wired to it
+    // yet — touching a component's terminal directly against the rail
+    // itself should auto-wire it too, the same as touching another
+    // component's terminal.
+    window.ESB.Sections.getAll().forEach((section) => {
+      [
+        { railId: section.leftRailId, x: section.leftX, side: "left" },
+        { railId: section.rightRailId, x: section.rightX, side: "right" }
+      ].forEach((rail) => {
+        const bounds = window.ESB.Sections.getRailBounds(section, rail.side);
+        const hit = G.distanceToSegment(
+          worldPoint,
+          { x: rail.x, y: bounds.topY },
+          { x: rail.x, y: bounds.bottomY }
+        );
+
+        if (hit.distance <= bestDist) {
+          bestDist = hit.distance;
+          best = { kind: "rail", railId: rail.railId, y: hit.point.y };
         }
       });
     });
@@ -452,10 +718,128 @@
       } else if (previouslyTouching) {
         S.createWire(
           { kind: "terminal", instanceId: instance.id, terminalId: terminal.id },
-          previouslyTouching
+          previouslyTouching,
+          currentCanvasId()
         );
         dragData.touchState[terminal.id] = null;
       }
+    });
+  }
+
+  // A component terminal's fixed offset from its own origin (e.g. ±75) is
+  // essentially never itself a multiple of Config.PLACEMENT_GRID (20), so
+  // after the *instance* snaps to that grid, the terminal's world
+  // position almost never lands exactly on the same coordinate as a
+  // junction/rail tap (which snap independently, directly to a grid
+  // multiple). The result is a few-unit residual jog right at the
+  // junction — real, but visually negligible — which would otherwise
+  // dominate a naive "look at the very next path point" direction check
+  // and mask an actual overlap sitting just beyond it.
+  const MEANINGFUL_SEGMENT_LENGTH = 25;
+
+  // Which side of `pathWire` (its "a" or "b" ref) resolves to `ref`, and
+  // the true local direction that wire departs the shared point from —
+  // walking along its *rendered* path (not just its raw far endpoint,
+  // which is wrong for any rail-connected wire: rails force a
+  // perpendicular departure, so their raw endpoint usually isn't even
+  // colinear with the shared point at all) until a segment of real length
+  // is found, skipping past any negligible residual jog right at the
+  // junction itself.
+  function pathDepartureDirection(pathWire, path, ref) {
+    const refIsA = S.sameRef(pathWire.a, ref);
+    const ordered = refIsA ? path : path.slice().reverse();
+    const anchor = ordered[0];
+
+    for (let i = 1; i < ordered.length; i += 1) {
+      const dx = ordered[i].x - anchor.x;
+      const dy = ordered[i].y - anchor.y;
+
+      if (Math.hypot(dx, dy) >= MEANINGFUL_SEGMENT_LENGTH || i === ordered.length - 1) {
+        return Math.abs(dx) >= Math.abs(dy)
+          ? { axis: "x", sign: dx < 0 ? -1 : 1 }
+          : { axis: "y", sign: dy < 0 ? -1 : 1 };
+      }
+    }
+
+    return null;
+  }
+
+  // A wired terminal whose wire ends at a plain 2-wire pass-through
+  // junction (not a real 3+ way branch) is really just one continuous run
+  // to whatever's on the junction's *other* side (a rail, another
+  // terminal, or a longer chain). A clean pass-through has the two wires
+  // departing the junction in OPPOSITE directions (one arrives from
+  // above, the other continues below, say). Dragging the component far
+  // enough crosses it onto the same side the junction's other wire
+  // already occupies — both wires then depart the junction in the SAME
+  // direction, overlapping along that shared stretch instead of
+  // continuing past it, which reads as the wire "doubling up." Collapsing
+  // both into one direct terminal-to-far wire (dropping the now-pointless
+  // junction) keeps it a single clean line no matter how far the
+  // component is dragged.
+  function simplifyPassthroughWires(instance) {
+    const type = Lib.getType(instance.typeId);
+    const WT = window.ESB.WireTool;
+
+    type.terminals.forEach((terminal) => {
+      const myRef = { kind: "terminal", instanceId: instance.id, terminalId: terminal.id };
+      const wire = S.state.wires.find((candidate) => {
+        return visibleInCurrentMode(candidate.canvasId) && (S.sameRef(candidate.a, myRef) || S.sameRef(candidate.b, myRef));
+      });
+      if (!wire) {
+        return;
+      }
+
+      const otherEnd = S.sameRef(wire.a, myRef) ? wire.b : wire.a;
+      if (otherEnd.kind !== "junction") {
+        return;
+      }
+
+      const junction = S.getJunction(otherEnd.junctionId);
+      if (!junction) {
+        return;
+      }
+
+      const junctionRef = { kind: "junction", junctionId: junction.id };
+      const otherWires = S.state.wires.filter((candidate) => {
+        if (candidate.id === wire.id || !visibleInCurrentMode(candidate.canvasId)) {
+          return false;
+        }
+        return S.sameRef(candidate.a, junctionRef) || S.sameRef(candidate.b, junctionRef);
+      });
+
+      // A real 3+ way branch (or a dead-end junction with nothing else
+      // attached) stays exactly as-is — only a simple 2-wire pass-through
+      // is ever collapsed.
+      if (otherWires.length !== 1) {
+        return;
+      }
+
+      const otherWire = otherWires[0];
+      const farRef = S.sameRef(otherWire.a, junctionRef) ? otherWire.b : otherWire.a;
+
+      const myPath = WT.getWirePath(wire);
+      const otherPath = WT.getWirePath(otherWire);
+      if (!myPath || !otherPath || myPath.length < 2 || otherPath.length < 2) {
+        return;
+      }
+
+      const myDir = pathDepartureDirection(wire, myPath, junctionRef);
+      const otherDir = pathDepartureDirection(otherWire, otherPath, junctionRef);
+      if (!myDir || !otherDir) {
+        return;
+      }
+
+      // Opposite directions (or different axes entirely, e.g. one arrives
+      // horizontally and the other departs vertically) is a normal,
+      // non-overlapping pass-through — nothing to fix.
+      if (!(myDir.axis === otherDir.axis && myDir.sign === otherDir.sign)) {
+        return;
+      }
+
+      S.removeWire(wire.id);
+      S.removeWire(otherWire.id);
+      S.createWire(myRef, farRef, wire.canvasId);
     });
   }
 
@@ -544,8 +928,13 @@
     return { x: resultX, y: resultY };
   }
 
-  function applyMove(point) {
+  // targetCanvasId is which split panel the pointer is currently over
+  // (from getCanvasContext, resolved fresh per pointermove/up) — undefined
+  // outside split mode, where canvas reassignment doesn't apply.
+  function applyMove(point, targetCanvasId) {
     const instance = S.getInstance(dragData.instanceId);
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    const inSplit = mode === "split";
 
     // fixedPosition (e.g. TSTAT Terminals, auto-bridged to the 24V rail):
     // selectable and deletable like any instance, but never repositioned.
@@ -563,10 +952,15 @@
       y: dragData.instanceStartY + dy
     };
 
-    const clamped = clampToCanvas(raw);
+    // Split panels are self-contained 1920x1080 boxes with no palette
+    // strip and no Sections-derived height — clampToCanvas's MIN_X/
+    // getTotalHeight assumptions don't apply there.
+    const clamped = inSplit ? clampToSplitCanvas(raw) : clampToCanvas(raw);
     const snapped = {
       x: G.snapToGrid(clamped.x, C.PLACEMENT_GRID),
-      y: G.snapToGrid(clamped.y, C.PLACEMENT_GRID)
+      // Y snaps to the section's fixed row grid, not the finer placement
+      // grid — matches wire endpoints onto the same predictable rows.
+      y: window.ESB.Sections.getNearestRowY(clamped.y)
     };
 
     const type = instance && Lib.getType(instance.typeId);
@@ -581,12 +975,36 @@
 
     S.moveInstance(dragData.instanceId, constrained.x, constrained.y);
 
-    if (instance) {
+    // Reassign canvasId based on whichever split panel the pointer is
+    // actually over right now — not the instance's raw x, since IDU and
+    // ODU are two independent 1920-wide panels, not one 1920 space split
+    // in half. A relay's contacts (linked by relayGroup) travel with the
+    // coil so the pair never ends up split across the two circuits.
+    if (inSplit && instance && targetCanvasId && instance.canvasId !== targetCanvasId) {
+      instance.canvasId = targetCanvasId;
+
+      if (instance.relayGroup) {
+        S.state.instances.forEach((inst) => {
+          if (inst.relayGroup === instance.relayGroup && inst.id !== instance.id) {
+            inst.canvasId = targetCanvasId;
+          }
+        });
+      }
+    }
+
+    // Split mode is components-only — no wiring capability at all, including
+    // the implicit touch-then-separate auto-wire that normal dragging gets.
+    if (instance && !inSplit) {
       checkTouchAndAutoWire(instance);
+      simplifyPassthroughWires(instance);
     }
 
     renderInstances();
     renderSelection();
+
+    if (inSplit && window.ESB.Mode && window.ESB.Mode.refreshSplitCanvases) {
+      window.ESB.Mode.refreshSplitCanvases();
+    }
   }
 
   // Moves a meter lead's tip directly to the cursor, snapping onto any
@@ -645,16 +1063,38 @@
       return;
     }
 
-    const svg = D.getElements().svg;
-    const point = G.clientToStage(svg, event.clientX, event.clientY);
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    // Re-resolved every frame: in split mode the cursor may have crossed
+    // from one panel into the other (or off both) since the last event.
+    const context = getCanvasContext(event);
 
     if (dragMode === "new-instance") {
-      renderDragGhost(point, dragData.typeId);
+      if (!context.svg) {
+        // Cursor is over the palette or the gap between panels — no valid
+        // drop target right now, so don't leave a stale ghost showing.
+        clearDragGhost();
+        return;
+      }
+      const point = G.clientToStage(context.svg, event.clientX, event.clientY);
+      // See the matching comment in onPointerDown — context.canvasId is
+      // "idu"/"odu" outside split mode too (for instance tagging), but the
+      // ghost layer lookup should only treat it as a split-panel SVG id
+      // when we're actually in split mode.
+      renderDragGhost(point, dragData.typeId, mode === "split" ? context.canvasId : null);
       return;
     }
 
+    const activeSvg = mode === "split" ? context.svg : D.getElements().svg;
+    if (!activeSvg) {
+      // Split mode, cursor currently over neither panel — hold position
+      // rather than computing a meaningless point.
+      return;
+    }
+
+    const point = G.clientToStage(activeSvg, event.clientX, event.clientY);
+
     if (dragMode === "move-instance") {
-      applyMove(point);
+      applyMove(point, context.canvasId);
       return;
     }
 
@@ -669,54 +1109,72 @@
   }
 
   function onPointerUp(event) {
-    const svg = D.getElements().svg;
-    const point = G.clientToStage(svg, event.clientX, event.clientY);
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    const inSplit = mode === "split";
+    const context = getCanvasContext(event);
+    const activeSvg = inSplit ? context.svg : D.getElements().svg;
+    const point = activeSvg ? G.clientToStage(activeSvg, event.clientX, event.clientY) : null;
 
-    if (dragMode === "move-tip") {
+    if (dragMode === "move-tip" && point) {
       applyMoveTip(point);
     }
 
-    if (dragMode === "rotate-lead") {
+    if (dragMode === "rotate-lead" && point) {
       applyRotateLead(point);
     }
 
     if (dragMode === "new-instance") {
-      if (point.x >= MIN_X) {
+      // Split panels have no palette to stay clear of — any drop inside
+      // one of the two panel SVGs is valid. Outside split mode, keep the
+      // original "must clear the palette strip" rule.
+      const validDrop = inSplit ? !!point : (point && point.x >= MIN_X);
+      const targetCanvasId = inSplit ? context.canvasId : (mode === "idu" || mode === "odu" ? mode : null);
+
+      if (validDrop) {
         const snapped = {
           x: G.snapToGrid(point.x, C.PLACEMENT_GRID),
-          y: G.snapToGrid(point.y, C.PLACEMENT_GRID)
+          y: window.ESB.Sections.getNearestRowY(point.y)
         };
+        const clampPoint = inSplit ? clampToSplitCanvas : clampToCanvas;
 
         const preset = RELAY_PRESETS[dragData.typeId];
 
         if (preset) {
           const designator = S.nextDesignator("R");
+          const relayGroup = `relay_${designator}`;
+
           const coil = S.createInstance(preset.previewTypeId, snapped.x, snapped.y, {
             label: designator,
-            deviceGroup: designator
+            deviceGroup: designator,
+            canvasId: targetCanvasId,
+            relayGroup: relayGroup
           });
 
           preset.contactTypeIds.forEach((contactTypeId, index) => {
-            const contactPoint = clampToCanvas({
+            const contactPoint = clampPoint({
               x: snapped.x,
               y: snapped.y + RELAY_ROW_OFFSET * (index + 1)
             });
 
             S.createInstance(contactTypeId, contactPoint.x, contactPoint.y, {
               label: designator,
-              deviceGroup: designator
+              deviceGroup: designator,
+              canvasId: targetCanvasId,
+              relayGroup: relayGroup
             });
           });
 
           S.select(coil.id);
-        } else if (dragData.typeId === "transformer" && !window.ESB.Sections.hasLowVoltageSection()) {
+        } else if (!inSplit && dragData.typeId === "transformer" && !window.ESB.Sections.hasLowVoltageSection()) {
           // First transformer placed: snap it to bridge the main ladder's
           // bottom rail and a newly-created low-voltage section's top
           // rail (H1/H2 and X1/X2 are exactly Config.SECTION_GAP/2 apart
           // from the instance's own origin). Only the initial placement
           // is special-cased — once a low-voltage section exists, later
           // transformers (and this one, afterward) behave like any other
-          // freely-draggable instance.
+          // freely-draggable instance. Sections are global, not per-panel,
+          // so this bridging recipe is skipped in split mode (falls
+          // through to the plain instance below instead).
           const main = window.ESB.Sections.getById("main");
           window.ESB.Sections.addLowVoltageSection();
           window.ESB.relayout();
@@ -724,13 +1182,18 @@
           const bridgeX = G.snapToGrid((main.leftX + main.rightX) / 2, C.PLACEMENT_GRID);
           const bridgeY = main.bottomY + C.SECTION_GAP / 2;
 
-          const instance = S.createInstance("transformer", bridgeX, bridgeY);
+          const instance = S.createInstance("transformer", bridgeX, bridgeY, {
+            canvasId: targetCanvasId
+          });
           S.select(instance.id);
-        } else if (dragData.typeId === "thermostat_block") {
+          window.ESB.Palette.render();
+        } else if (!inSplit && dragData.typeId === "thermostat_block") {
           // TSTAT Terminals requires 24VAC to exist at all — without a
           // transformer there's no low-voltage section/rail for it to
           // bridge to, so the drop is rejected outright rather than
-          // placing a disconnected block.
+          // placing a disconnected block. Same Sections-are-global caveat
+          // as the transformer branch above — skipped entirely in split
+          // mode.
           if (!window.ESB.Sections.hasLowVoltageSection()) {
             showToast("A transformer is required to add this component.");
           } else if (!window.ESB.Sections.getById("lowVoltage").tstatInstanceId) {
@@ -746,15 +1209,23 @@
             // rail's own x — the rail reads as running straight into it,
             // not jogging sideways to reach it.
             const instanceX = lowSection.leftX + 95;
-            const instanceY = rTerminalY + 150; // -BLOCK_TOP for the 6-row block, matching symbols-hvac-inputs.js
+            // R row's own local y (its terminals' y) IS -BLOCK_TOP by
+            // construction (symbols-hvac-inputs.js) — read it from the
+            // registered type instead of duplicating that constant here,
+            // so the two files can't silently drift apart.
+            const tstatType = Lib.getType("thermostat_block");
+            const rRowLocalY = tstatType.terminals.find((terminal) => terminal.id === "r_l").y;
+            const instanceY = rTerminalY - rRowLocalY;
 
             const instance = S.createInstance("thermostat_block", instanceX, instanceY, {
-              fixedPosition: true
+              fixedPosition: true,
+              canvasId: targetCanvasId
             });
 
             S.createWire(
               { kind: "rail", railId: lowSection.leftRailId, y: rTerminalY },
-              { kind: "terminal", instanceId: instance.id, terminalId: "r_l" }
+              { kind: "terminal", instanceId: instance.id, terminalId: "r_l" },
+              targetCanvasId
             );
 
             window.ESB.Sections.attachTstat("lowVoltage", instance.id, rTerminalY);
@@ -764,12 +1235,18 @@
             S.select(instance.id);
           }
         } else {
-          const instance = S.createInstance(dragData.typeId, snapped.x, snapped.y);
+          const instance = S.createInstance(dragData.typeId, snapped.x, snapped.y, {
+            canvasId: targetCanvasId
+          });
           S.select(instance.id);
         }
 
         renderInstances();
         renderSelection();
+
+        if (inSplit && window.ESB.Mode && window.ESB.Mode.refreshSplitCanvases) {
+          window.ESB.Mode.refreshSplitCanvases();
+        }
       }
 
       clearDragGhost();
@@ -779,7 +1256,9 @@
       // Applied again here (not just on pointermove) so a move still
       // completes correctly even if no intermediate move events fired
       // between pointerdown and pointerup.
-      applyMove(point);
+      if (point) {
+        applyMove(point, context.canvasId);
+      }
     }
 
     dragMode = null;

@@ -7,6 +7,7 @@
 
   const Lib = window.ESB.SymbolLibrary;
   const D = window.ESB.Drawing;
+  const C = window.ESB.Config;
 
   // Thermostat sub-base: one block, six wireable terminals (one per wire
   // color), not six separate palette pieces. Each row is a source point,
@@ -23,7 +24,13 @@
     { id: "c", letter: "C", color: "#1a1a1a", textColor: "#ffffff" }
   ];
 
-  const ROW_H = 60;
+  // Every other line of the low-voltage section's own 30-row snap grid
+  // (see Sections.getLowVoltageRowSpacing) — close to the old fixed 60,
+  // but an exact multiple of the grid so each of the six rows below lands
+  // squarely on one of its lines instead of drifting between them. One
+  // grid interval alone (~28.7) would be too tight for the existing
+  // 50-tall color rects to fit without overlapping.
+  const ROW_H = window.ESB.Sections.getLowVoltageRowSpacing() * 2;
   const BLOCK_TOP = -((THERMOSTAT_ROWS.length - 1) * ROW_H) / 2;
 
   Lib.register({

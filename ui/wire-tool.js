@@ -23,6 +23,47 @@
   let dragMode = null; // null | "drawing-wire" | "move-wire"
   let dragData = null;
 
+  // Wiring is available in build and the two single-canvas modes (IDU/ODU
+  // are otherwise full editors, just filtered to one HVAC unit's
+  // components) — only Check Circuit (read-only built circuit) and Split
+  // Screen (components/movement only, per spec) turn it off.
+  function wiringAllowedInMode(mode) {
+    return mode === "build" || mode === "idu" || mode === "odu";
+  }
+
+  // The canvasId a NEW wire/junction should be tagged with, given the
+  // current mode — "idu"/"odu" while in one of the single-canvas modes,
+  // null (shared/build) otherwise.
+  function currentCanvasId() {
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    return mode === "idu" || mode === "odu" ? mode : null;
+  }
+
+  // Whether an existing item's canvasId (a wire's, a junction's) should be
+  // visible/usable in the given mode (defaults to the CURRENT mode).
+  // Build (and Check) show everything unfiltered, exactly like instances
+  // already do — only IDU/ODU actually scope things down to their own
+  // circuit, so a wire drawn in one is never visible, or connectable,
+  // from the other. An explicit forMode lets mode.js's split-screen
+  // rendering ask "is this visible for the IDU/ODU panel" even though the
+  // *actual* current mode at that moment is "split", not "idu"/"odu".
+  function visibleInCurrentMode(canvasId, forMode) {
+    const mode = forMode || (window.ESB.Mode ? window.ESB.Mode.getMode() : "build");
+    if (mode !== "idu" && mode !== "odu") {
+      return true;
+    }
+    return !canvasId || canvasId === mode;
+  }
+
+  // A wire's free end (drawn to blank canvas, not onto a terminal/rail/
+  // another wire) may never sit outside the main ladder's own L1/L2 span —
+  // there's nothing meaningful to the left of L1 or right of L2 for a wire
+  // to reach.
+  function clampToRailSpan(x) {
+    const main = window.ESB.Sections.getById("main");
+    return main ? Math.max(main.leftX, Math.min(main.rightX, x)) : x;
+  }
+
   // A rail is a bus, not a point — a wire touching one must always depart/
   // arrive *perpendicular* to it (horizontal, since every rail in this
   // library is vertical), never run parallel alongside it first.
@@ -144,6 +185,23 @@
     ];
   }
 
+  // Public wrapper around wirePath for other modules (canvas-
+  // interactions.js's overlap/doubling checks) that need a wire's actual
+  // rendered path — not just its two raw endpoints — since a rail-
+  // connected wire always bends (rails require a perpendicular
+  // departure), so the endpoint alone usually isn't even colinear with
+  // anything near it; only the bend corner right next to a junction is.
+  // Path points always run start-to-end in wire.a → wire.b order, matching
+  // wirePath's own pointA/pointB convention.
+  function getWirePath(wire) {
+    const pointA = G.resolveRefPoint(wire.a);
+    const pointB = G.resolveRefPoint(wire.b);
+    if (!pointA || !pointB) {
+      return null;
+    }
+    return wirePath(wire, pointA, pointB);
+  }
+
   // excludeInstanceId leaves out one instance's own terminals — needed so
   // dragging something that snaps onto other terminals (a meter lead's
   // tip; see ui/canvas-interactions.js) doesn't find *itself* as the
@@ -159,6 +217,12 @@
       if (instance.id === excludeInstanceId) {
         return;
       }
+      // IDU/ODU are independent circuits — a wire being drawn in one must
+      // never be able to snap onto a component that only exists in the
+      // other.
+      if (!visibleInCurrentMode(instance.canvasId)) {
+        return;
+      }
 
       const type = Lib.getType(instance.typeId);
       type.terminals.forEach((terminal) => {
@@ -170,6 +234,10 @@
     });
 
     S.state.junctions.forEach((junction) => {
+      if (!visibleInCurrentMode(junction.canvasId)) {
+        return;
+      }
+
       points.push({
         ref: { kind: "junction", junctionId: junction.id },
         point: { x: junction.x, y: junction.y }
@@ -235,6 +303,11 @@
       if (wire.id === excludeWireId) {
         return;
       }
+      // IDU/ODU independence — a wire being drawn in one mode should never
+      // tee into a wire that only exists in the other.
+      if (!visibleInCurrentMode(wire.canvasId)) {
+        return;
+      }
 
       const pointA = G.resolveRefPoint(wire.a);
       const pointB = G.resolveRefPoint(wire.b);
@@ -268,8 +341,11 @@
   // just a routing bend (one wire drawn in two gestures, or dragged back
   // through the same point): electrically it's a pass-through, not a real
   // tie, so it gets no visible dot. 3+ is a genuine multi-way branch.
-  function junctionWireCount(junctionId) {
+  function junctionWireCount(junctionId, forMode) {
     return S.state.wires.filter((wire) => {
+      if (!visibleInCurrentMode(wire.canvasId, forMode)) {
+        return false;
+      }
       return (
         (wire.a.kind === "junction" && wire.a.junctionId === junctionId) ||
         (wire.b.kind === "junction" && wire.b.junctionId === junctionId)
@@ -323,11 +399,68 @@
     return { start: startRef, end: endRef };
   }
 
-  function renderWires() {
-    const layer = document.getElementById("wireLayer");
-    D.clearGroup(layer);
+  // Re-tracing a wire exactly (same two endpoints, either order) already
+  // erases it — see the "duplicate" check in onPointerUp. But drawing a new
+  // wire from the same start point *past* a shorter existing wire already
+  // occupying part of that same straight run left the old, now-redundant
+  // segment doubled up underneath the new, longer one instead of being
+  // absorbed into it. Only applies to a straight (unbent) new run — a bent
+  // new wire has no single axis to compare a stacked candidate against.
+  function removeSubsumedWires(startRef, startPoint, endPoint) {
+    if (startPoint.x !== endPoint.x && startPoint.y !== endPoint.y) {
+      return;
+    }
 
+    const axis = startPoint.x === endPoint.x ? "y" : "x";
+    const crossAxis = axis === "x" ? "y" : "x";
+    const lo = Math.min(startPoint[axis], endPoint[axis]);
+    const hi = Math.max(startPoint[axis], endPoint[axis]);
+
+    const toRemove = S.state.wires.filter((candidate) => {
+      if (!visibleInCurrentMode(candidate.canvasId)) {
+        return false;
+      }
+
+      let farRef = null;
+      if (S.sameRef(candidate.a, startRef)) {
+        farRef = candidate.b;
+      } else if (S.sameRef(candidate.b, startRef)) {
+        farRef = candidate.a;
+      } else {
+        return false;
+      }
+
+      const farPoint = G.resolveRefPoint(farRef);
+      if (!farPoint) {
+        return false;
+      }
+
+      // Same straight line as the new run (matching cross-axis position),
+      // and its far end lands strictly between the new wire's own two
+      // endpoints — i.e. it's a shorter stub the new, longer wire now
+      // completely covers.
+      const onLine = Math.abs(farPoint[crossAxis] - startPoint[crossAxis]) < 0.5;
+      const farVal = farPoint[axis];
+
+      return onLine && farVal > lo + 0.5 && farVal <= hi + 0.5;
+    });
+
+    toRemove.forEach((wire) => S.removeWire(wire.id));
+  }
+
+  // Core wire+junction rendering, reusable for both the main canvas
+  // (renderWires, using the live current mode) and a split-screen panel
+  // (mode.js's renderWiresForCanvas, which needs an explicit "idu"/"odu"
+  // since the *actual* current mode while in split screen is "split", not
+  // either single-canvas mode).
+  function renderWiresIntoLayer(layer, forMode) {
     S.state.wires.forEach((wire) => {
+      // IDU and ODU are independent circuits — a wire drawn in one must
+      // never render (or be selectable/movable) while viewing the other.
+      if (!visibleInCurrentMode(wire.canvasId, forMode)) {
+        return;
+      }
+
       const pointA = G.resolveRefPoint(wire.a);
       const pointB = G.resolveRefPoint(wire.b);
 
@@ -372,11 +505,32 @@
     });
 
     S.state.junctions.forEach((junction) => {
-      // Only a genuine 3+ way tie gets a visible dot — 2 wires meeting
-      // here is just a bend (the same logical wire drawn in two
-      // gestures), not a real junction.
-      if (junctionWireCount(junction.id) >= 3) {
+      if (!visibleInCurrentMode(junction.canvasId, forMode)) {
+        return;
+      }
+
+      const wireCount = junctionWireCount(junction.id, forMode);
+
+      // Only a genuine 3+ way tie gets a solid dot — 2 wires meeting here
+      // is just a bend (the same logical wire drawn in two gestures), not
+      // a real junction.
+      if (wireCount >= 3) {
         D.circle(junction.x, junction.y, 6, { fill: "#111111", stroke: "none" }, layer);
+      } else if (wireCount === 1) {
+        // A genuinely open, unconnected wire end — a junction (by
+        // definition never a component terminal) with only one wire
+        // touching it is a dangling stub, not a pass-through bend or a
+        // real branch. Marked the same way a component's own terminal is
+        // (see symbol-library.js's drawInstance) so an open end reads as
+        // "intentionally unterminated" rather than a rendering glitch.
+        // The moment a second wire attaches here — continuing the chain
+        // or tee-ing into it — wireCount stops being 1 and this marker
+        // disappears, leaving it only at whichever end is still open.
+        D.circle(
+          junction.x, junction.y, 5.5,
+          { fill: "#ffffff", stroke: "#111111", "stroke-width": 2.5 },
+          layer
+        );
       }
 
       // The hit-zone stays regardless of wire count — a 2-wire junction is
@@ -393,6 +547,21 @@
         layer
       );
     });
+  }
+
+  function renderWires() {
+    const layer = document.getElementById("wireLayer");
+    D.clearGroup(layer);
+    renderWiresIntoLayer(layer, null);
+  }
+
+  // Public entry point for mode.js's split-screen panels — draws wires
+  // into an arbitrary layer, scoped to an explicit "idu"/"odu" rather than
+  // whatever the actual current mode happens to be. Does not clear the
+  // layer itself (the caller already clears/rebuilds the whole panel SVG
+  // each render, see mode.js's renderSplitCanvas).
+  function renderWiresForCanvas(layer, canvasId) {
+    renderWiresIntoLayer(layer, canvasId);
   }
 
   // Draws the selected wire's delete button into the given layer (owned
@@ -438,7 +607,8 @@
   }
 
   function onPointerDownCapture(event) {
-    if (window.ESB.Mode && window.ESB.Mode.getMode() !== "build") {
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    if (!wiringAllowedInMode(mode)) {
       return;
     }
 
@@ -453,9 +623,23 @@
     event.stopImmediatePropagation();
     event.preventDefault();
 
+    // A rail is a bus — any point along its length is a valid click, so
+    // unlike a terminal/junction (already a fixed point) the exact Y
+    // clicked is otherwise arbitrary. Snapping it to the same row grid
+    // everything else uses means a wire started here lands on a
+    // predictable row from the very first pixel, not wherever the click
+    // happened to land.
+    let startRef = hit.ref;
+    let startPoint = hit.point;
+    if (startRef.kind === "rail") {
+      const snappedY = window.ESB.Sections.getNearestRowY(startPoint.y);
+      startRef = { kind: "rail", railId: startRef.railId, y: snappedY };
+      startPoint = { x: startPoint.x, y: snappedY };
+    }
+
     dragMode = "drawing-wire";
-    dragData = { startRef: hit.ref, startPoint: hit.point };
-    renderPreview(hit.point, hit.point, true, hit.ref, null);
+    dragData = { startRef, startPoint };
+    renderPreview(startPoint, startPoint, true, startRef, null);
 
     // Without this, the cursor reverts to whatever's under the pointer
     // mid-drag (grab over a component body, default over blank canvas) —
@@ -497,7 +681,9 @@
     const svg = D.getElements().svg;
     const point = G.clientToStage(svg, event.clientX, event.clientY);
     const snapHit = findEndpoint(point, C.TERMINAL_SNAP_RADIUS);
-    let endPoint = snapHit ? snapHit.point : point;
+    let endPoint = snapHit
+      ? snapHit.point
+      : { x: clampToRailSpan(point.x), y: window.ESB.Sections.getNearestRowY(point.y) };
 
     // Preview-only: matches the horizontal lock applied at commit time (see
     // onPointerUp), so the wire doesn't visibly snap straight only at the
@@ -536,19 +722,25 @@
       const targetWire = S.getWire(snapHit.ref.wireId);
 
       if (targetWire) {
-        const junction = S.createJunction(snapHit.point.x, snapHit.point.y);
+        const junction = S.createJunction(snapHit.point.x, snapHit.point.y, currentCanvasId());
         endRef = { kind: "junction", junctionId: junction.id };
 
-        S.createWire(targetWire.a, endRef);
-        S.createWire(endRef, targetWire.b);
+        S.createWire(targetWire.a, endRef, targetWire.canvasId);
+        S.createWire(endRef, targetWire.b, targetWire.canvasId);
         S.removeWire(targetWire.id);
       }
     } else if (snapHit) {
       endRef = snapHit.ref;
     } else if (point.x >= MIN_X) {
+      // A free end may never reach past L1/R2's own X span — nothing out
+      // there for a wire to meaningfully connect to. Y snaps to the
+      // section's fixed row grid (Sections.getNearestRowY), not the finer
+      // placement grid — a dedicated, predictable set of "wire rows"
+      // rather than any arbitrary height.
       const junction = S.createJunction(
-        G.snapToGrid(point.x, C.PLACEMENT_GRID),
-        G.snapToGrid(point.y, C.PLACEMENT_GRID)
+        G.snapToGrid(clampToRailSpan(point.x), C.PLACEMENT_GRID),
+        window.ESB.Sections.getNearestRowY(point.y),
+        currentCanvasId()
       );
       endRef = { kind: "junction", junctionId: junction.id };
     }
@@ -563,6 +755,9 @@
       // Re-tracing an existing connection (drawing the same wire back over
       // itself) removes it instead of adding a redundant, overlapping one.
       const duplicate = S.state.wires.find((candidate) => {
+        if (!visibleInCurrentMode(candidate.canvasId)) {
+          return false;
+        }
         return (
           (S.sameRef(candidate.a, dragData.startRef) && S.sameRef(candidate.b, endRef)) ||
           (S.sameRef(candidate.a, endRef) && S.sameRef(candidate.b, dragData.startRef))
@@ -572,7 +767,11 @@
       if (duplicate) {
         S.removeWire(duplicate.id);
       } else {
-        const wire = S.createWire(dragData.startRef, endRef);
+        const endPoint = G.resolveRefPoint(endRef);
+        if (endPoint) {
+          removeSubsumedWires(dragData.startRef, dragData.startPoint, endPoint);
+        }
+        const wire = S.createWire(dragData.startRef, endRef, currentCanvasId());
         S.selectWire(wire.id);
       }
     }
@@ -587,7 +786,8 @@
   }
 
   function onPointerDownSelect(event) {
-    if (window.ESB.Mode && window.ESB.Mode.getMode() !== "build") {
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    if (!wiringAllowedInMode(mode)) {
       return;
     }
 
@@ -636,5 +836,12 @@
     renderWires();
   }
 
-  window.ESB.WireTool = { init, renderWires, renderWireToolbar, findConnectionPoint };
+  window.ESB.WireTool = {
+    init,
+    renderWires,
+    renderWiresForCanvas,
+    renderWireToolbar,
+    findConnectionPoint,
+    getWirePath
+  };
 })();

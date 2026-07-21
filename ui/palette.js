@@ -28,13 +28,17 @@
   // Only one TSTAT Terminals block is ever allowed on the canvas (it's the
   // single bridge onto the 24V rail) — once one exists, its palette row is
   // greyed out and stops accepting drags rather than letting a second one
-  // compete for the same rail.
+  // compete for the same rail. Same idea for the transformer: only one
+  // ever bridges the main ladder to the (single, shared) low-voltage
+  // section, so a second one has nothing valid left to bridge to.
+  const SINGLE_USE_TYPE_IDS = ["thermostat_block", "transformer"];
+
   function isSingleUseAndPlaced(typeId) {
-    if (typeId !== "thermostat_block") {
+    if (!SINGLE_USE_TYPE_IDS.includes(typeId)) {
       return false;
     }
 
-    return window.ESB.State.state.instances.some((instance) => instance.typeId === "thermostat_block");
+    return window.ESB.State.state.instances.some((instance) => instance.typeId === typeId);
   }
 
   function buildRows() {
