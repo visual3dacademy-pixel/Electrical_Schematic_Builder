@@ -61,7 +61,10 @@
       variant: type.defaultVariant || null,
       deviceGroup: opts.deviceGroup !== undefined ? opts.deviceGroup : null,
       params: Object.assign({}, type.defaultParams),
-      locked: false,
+      // Permanent fixtures (e.g. the built-in circuit breakers under
+      // L1/L2) block both move and delete; TSTAT Terminals-style
+      // "fixedPosition" instances below block only move.
+      locked: !!opts.locked,
       // Distinct from `locked` (which also blocks deletion) — an instance
       // placed by an automatic bridging recipe (e.g. TSTAT Terminals to
       // the 24V rail) that must stay exactly where it was placed, but can
@@ -171,6 +174,18 @@
     return state.wires.find((wire) => wire.id === id) || null;
   }
 
+  // Manual override for a wire's routing: when set, the wire renders as a
+  // 3-segment path (down/up to bendY, across at bendY, down/up to the
+  // other end) instead of the auto-computed 2-segment orthogonal path —
+  // this is what lets a selected wire be dragged to a new position while
+  // staying strictly horizontal/vertical.
+  function setWireBendY(id, y) {
+    const wire = getWire(id);
+    if (wire) {
+      wire.bendY = y;
+    }
+  }
+
   function removeWire(id) {
     const wire = getWire(id);
     state.wires = state.wires.filter((candidate) => candidate.id !== id);
@@ -241,6 +256,7 @@
     createWire,
     getWire,
     removeWire,
+    setWireBendY,
     selectWire,
     getSelectedWire,
     sameRef

@@ -306,6 +306,15 @@
     return add("path", opts, parent);
   }
 
+  // For opaque, non-schematic artwork (meter body, meter lead photos) that
+  // gets embedded as-is rather than traced into path data — referenced by
+  // relative URL, not inlined as base64, since these source files are
+  // hundreds of KB and inlining would bloat every JS file that touches them.
+  function image(href, x, y, width, height, options, parent) {
+    const opts = Object.assign({ href, x, y, width, height }, options || {});
+    return add("image", opts, parent);
+  }
+
   function text(x, y, content, size, weight, color, options, parent) {
     const opts = Object.assign(
       {
@@ -352,6 +361,7 @@
     rect,
     circle,
     path,
+    image,
     text,
     drawVersion
   };

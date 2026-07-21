@@ -12,6 +12,7 @@
     id: "motor_load",
     category: "load",
     label: "Blower Motor",
+    hiddenFromPalette: true,
     designatorPrefix: "M",
     width: 150,
     height: 120,

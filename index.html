@@ -6,12 +6,55 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Electrical Schematic Builder</title>
 
-  <link rel="stylesheet" href="styles.css?v=0.1" />
+  <link rel="stylesheet" href="styles.css?v=0.5" />
+  <link rel="preload" as="image" href="SVG/V3D%20academy_home_screen.svg?v=1" />
 </head>
 
 <body>
+  <script src="js/loading-screen.js?v=1"></script>
+
   <main id="app">
     <section id="stage" aria-label="Schematic builder stage">
+      <!--
+        Nested inside #stage (not a viewport-fixed overlay) so it's
+        confined to the exact same 1920x1080-scaled, bordered box as
+        everything else — sized and centered identically regardless of the
+        actual browser window size. The spinner/text use an SVG with the
+        same viewBox="0 0 1920 1080" convention as circuitSvg/paletteSvg,
+        which is what makes them scale in lockstep with that box instead
+        of drifting relative to it the way raw CSS px/vw values would.
+      -->
+      <div id="loading-screen">
+        <svg id="loading-spinner-overlay" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          <g transform="translate(960,540)">
+            <g class="loading-spin-group">
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(0)" opacity="1"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(30)" opacity="0.92"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(60)" opacity="0.84"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(90)" opacity="0.76"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(120)" opacity="0.68"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(150)" opacity="0.60"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(180)" opacity="0.52"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(210)" opacity="0.44"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(240)" opacity="0.36"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(270)" opacity="0.28"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(300)" opacity="0.20"/>
+              <rect class="loading-bar" x="-13" y="-366" width="26" height="92" rx="13" transform="rotate(330)" opacity="0.12"/>
+            </g>
+          </g>
+        </svg>
+
+        <img
+          id="loading-screen-image"
+          src="SVG/V3D%20academy_home_screen.svg?v=1"
+          alt="Visual 3D Academy — Electrical Circuit Builder"
+        />
+
+        <svg id="loading-text-overlay" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          <text x="960" y="990" text-anchor="middle" class="loading-text-svg">Loading Electrical Circuit Builder</text>
+        </svg>
+      </div>
+
       <div id="scrollArea">
         <svg
           id="circuitSvg"
@@ -32,24 +75,27 @@
 
   <script src="js/config.js?v=0.4"></script>
   <script src="js/geometry.js?v=0.4"></script>
-  <script src="js/state.js?v=0.5"></script>
-  <script src="js/svg-drawing.js?v=0.2"></script>
-  <script src="js/sections.js?v=0.3"></script>
+  <script src="js/state.js?v=0.6"></script>
+  <script src="js/svg-drawing.js?v=0.3"></script>
+  <script src="js/sections.js?v=0.5"></script>
 
   <script src="symbols/symbol-library.js?v=0.2"></script>
   <script src="symbols/symbols-coil-contact.js?v=0.2"></script>
-  <script src="symbols/symbols-power.js?v=0.7"></script>
+  <script src="symbols/symbols-power.js?v=1.0"></script>
   <script src="symbols/symbols-hvac-inputs.js?v=0.6"></script>
-  <script src="symbols/symbols-loads.js?v=0.4"></script>
-  <script src="symbols/symbols-misc.js?v=0.5"></script>
+  <script src="symbols/symbols-loads.js?v=0.5"></script>
+  <script src="symbols/symbols-misc.js?v=0.7"></script>
+  <script src="symbols/symbols-meter.js?v=0.3"></script>
 
   <script src="engine/netlist.js?v=0.2"></script>
 
-  <script src="ui/palette.js?v=0.5"></script>
-  <script src="ui/canvas-interactions.js?v=0.6"></script>
-  <script src="ui/wire-tool.js?v=0.4"></script>
+  <script src="ui/palette.js?v=0.6"></script>
+  <script src="ui/canvas-interactions.js?v=1.5"></script>
+  <script src="ui/wire-tool.js?v=1.1"></script>
   <script src="ui/label-editor.js?v=0.1"></script>
+  <script src="ui/breaker-control.js?v=0.1"></script>
+  <script src="ui/mode.js?v=0.3"></script>
 
-  <script src="script.js?v=0.5"></script>
+  <script src="script.js?v=0.7"></script>
 </body>
 </html>

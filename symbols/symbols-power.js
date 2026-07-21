@@ -102,33 +102,59 @@
   });
 
   // Circuit Breaker — Assets/SVG/Circuit Breaker.svg (updated viewBox
-  // 76.44x29.01). Terminal centers (8.23,20.36) and (68.20,20.78);
-  // scale=150/59.97=2.5013.
+  // 76.44x29.01). Terminal centers (8.23,20.36) and (68.20,20.78). Scaled
+  // down further (terminal span 60, half of the previous 120) so the two
+  // terminal circles sit closer together and the arc reads smaller — same
+  // shape, same trace, just a smaller overall footprint. 60 stays a
+  // multiple of Config.PLACEMENT_GRID (20), so the rail tap point built
+  // from this span (see canvas-interactions.js's createBuiltInBreakers)
+  // still lands exactly on the grid. No longer a palette entry: two are
+  // created automatically at startup, in series at the top of L1 and L2,
+  // each rotated so their arcs face each other.
+  //
+  // The arc + its two stubs are wrapped in their own sub-group
+  // (data-breaker-arc, matching the instance id) with a CSS-transitioned
+  // style transform, not a plain SVG transform attribute — that's what
+  // lets ui/breaker-control.js animate it smoothly on open/close by
+  // updating that one element's style directly, instead of forcing a full
+  // re-render (which would just snap to the new position with no
+  // transition, since the element would be brand new each time).
   Lib.register({
     id: "breaker",
     category: "protective",
     label: "Circuit Breaker",
     designatorPrefix: "CB",
-    width: 150,
-    height: 110,
+    hiddenFromPalette: true,
+    width: 60,
+    height: 45,
     canFault: true,
+    defaultParams: { open: false },
     terminals: [
-      { id: "t1", x: -75, y: 0 },
-      { id: "t2", x: 75, y: 0 }
+      { id: "t1", x: -30, y: 0 },
+      { id: "t2", x: 30, y: 0 }
     ],
-    labelAnchor: { x: 0, y: -70 },
-    draw(parent) {
-      const g = D.group({ transform: "translate(-95.58,-51.45) scale(2.5013)" }, parent);
-      const sw = { width: 1.2 };
+    labelAnchor: { x: 0, y: -28 },
+    draw(parent, instance) {
+      const g = D.group({ transform: "translate(-38.23,-20.58) scale(1.0005)" }, parent);
+      const sw = { width: 0.48 };
 
-      D.path("M67.5,12.91C59.71,4.96,49.08.45,37.96.36c-11.13-.09-21.83,4.27-29.73,12.1", sw, g);
+      const isOpen = !!(instance && instance.params && instance.params.open);
+      const arcGroup = D.group(
+        {
+          "data-breaker-arc": instance && instance.id ? instance.id : "",
+          style: `transform:translate(0px,${isOpen ? "-10px" : "0px"});transition:transform 0.3s ease;`
+        },
+        g
+      );
+
+      D.path("M67.5,12.91C59.71,4.96,49.08.45,37.96.36c-11.13-.09-21.83,4.27-29.73,12.1", sw, arcGroup);
 
       // Short stubs closing the gap between the arc's own endpoints
       // (67.5,12.91) and (8.23,12.46) and the terminal centers
       // (68.20,20.78) and (8.23,20.36) — added rather than editing the
       // curve itself, so the bezier shape stays untouched.
-      D.line(67.5, 12.91, 68.2, 20.78, sw, g);
-      D.line(8.23, 12.46, 8.23, 20.36, sw, g);
+      D.line(67.5, 12.91, 68.2, 20.78, sw, arcGroup);
+      D.line(8.23, 12.46, 8.23, 20.36, sw, arcGroup);
     }
   });
 })();

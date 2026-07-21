@@ -2,12 +2,11 @@
 //
 // Static palette panel occupying the left Config.PALETTE_W strip of the
 // stage. Text-only rows (no glyph preview) — canvas-interactions.js reads
-// the data-palette-type attribute to start a placement drag.
-//
-// "SPST Relay"/"SPDT Relay" are placement recipes rather than real
-// SymbolTypes (see RELAY_PRESETS in canvas-interactions.js) — they're
-// listed here first, since that's the piece the learner is really
-// picking up.
+// the data-palette-type attribute to start a placement drag. Rows are
+// sorted alphabetically by label (case-insensitive), "SPST Relay"/
+// "SPDT Relay" included — those two are placement recipes rather than
+// real SymbolTypes (see RELAY_PRESETS in canvas-interactions.js), but
+// they sort into the list the same as everything else.
 
 (function () {
   "use strict";
@@ -51,10 +50,13 @@
         label: type.label
       }));
 
-    return specialRows.concat(typeRows).map((row) => ({
-      ...row,
-      disabled: isSingleUseAndPlaced(row.paletteType)
-    }));
+    return specialRows
+      .concat(typeRows)
+      .sort((a, b) => a.label.localeCompare(b.label))
+      .map((row) => ({
+        ...row,
+        disabled: isSingleUseAndPlaced(row.paletteType)
+      }));
   }
 
   function render() {

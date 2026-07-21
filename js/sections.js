@@ -122,17 +122,69 @@
     return Math.max(C.VIEW_H, last.bottomY + 80);
   }
 
+  // Effective rendered/hit-tested span of one rail — defaults to the
+  // section's own topY/bottomY, but either end can be overridden per-side
+  // (e.g. the built-in circuit breakers cut into the top of L1/L2, so
+  // those rails only need to start below them; TSTAT Terminals similarly
+  // shortens the low-voltage section's left rail from the bottom).
+  function getRailBounds(section, side) {
+    const topKey = side === "left" ? "leftRailTopY" : "rightRailTopY";
+    const bottomKey = side === "left" ? "leftRailBottomY" : "rightRailBottomY";
+
+    return {
+      topY: section[topKey] || section.topY,
+      bottomY: section[bottomKey] || section.bottomY
+    };
+  }
+
+  // Used once at startup by the built-in circuit breakers: both L1 and L2
+  // visually/electrically start below the breakers rather than at the
+  // section's normal topY. The "L1"/"L2" labels stay put (labelY keeps
+  // its original position) since the breakers sit between the label and
+  // the now-shorter rail.
+  function setRailTopOverride(sectionId, leftTopY, rightTopY) {
+    const section = getById(sectionId);
+    if (!section) {
+      return;
+    }
+
+    if (section.labelY === undefined) {
+      section.labelY = section.topY - 30;
+    }
+
+    section.leftRailTopY = leftTopY;
+    section.rightRailTopY = rightTopY;
+  }
+
   function renderAll(parent) {
     const D = window.ESB.Drawing;
 
     sections.forEach((section) => {
-      const leftBottom = section.leftRailBottomY || section.bottomY;
+      const left = getRailBounds(section, "left");
+      const right = getRailBounds(section, "right");
+      const labelY = section.labelY !== undefined ? section.labelY : section.topY - 30;
 
-      D.line(section.leftX, section.topY, section.leftX, leftBottom, { stroke: "#111111", width: 6 }, parent);
-      D.line(section.rightX, section.topY, section.rightX, section.bottomY, { stroke: "#111111", width: 6 }, parent);
+      D.line(section.leftX, left.topY, section.leftX, left.bottomY, { stroke: "#111111", width: 6 }, parent);
+      D.line(section.rightX, right.topY, section.rightX, right.bottomY, { stroke: "#111111", width: 6 }, parent);
 
-      D.text(section.leftX, section.topY - 30, section.leftLabel, 26, 900, "#111111", {}, parent);
-      D.text(section.rightX, section.topY - 30, section.rightLabel, 26, 900, "#111111", {}, parent);
+      // Invisible, generously wide hit-zone along each rail so hovering
+      // anywhere on L1/L2/24V/C shows the crosshair cursor — signaling
+      // "wire mode" here — rather than only right on the thin 6px line.
+      // Drawn into the same (bottom) static layer, so any wire or
+      // instance drawn later still takes hover priority over it.
+      D.line(
+        section.leftX, left.topY, section.leftX, left.bottomY,
+        { stroke: "transparent", width: 30, style: "cursor:crosshair;" },
+        parent
+      );
+      D.line(
+        section.rightX, right.topY, section.rightX, right.bottomY,
+        { stroke: "transparent", width: 30, style: "cursor:crosshair;" },
+        parent
+      );
+
+      D.text(section.leftX, labelY, section.leftLabel, 26, 900, "#111111", {}, parent);
+      D.text(section.rightX, labelY, section.rightLabel, 26, 900, "#111111", {}, parent);
     });
   }
 
@@ -144,6 +196,8 @@
     addLowVoltageSection,
     attachTstat,
     releaseTstat,
+    getRailBounds,
+    setRailTopOverride,
     getTotalHeight,
     renderAll
   };

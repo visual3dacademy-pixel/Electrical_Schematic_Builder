@@ -51,6 +51,7 @@
     ensureLayer("selectionLayer", svg);
     ensureLayer("wirePreviewLayer", svg);
     ensureLayer("dragPreviewLayer", svg);
+    ensureLayer("breakerControlLayer", svg);
     ensureLayer("paletteLayer", paletteSvg);
 
     relayout();
@@ -62,6 +63,8 @@
     window.ESB.CanvasInteractions.init();
     window.ESB.WireTool.init();
     window.ESB.LabelEditor.init();
+    window.ESB.BreakerControl.render();
+    window.ESB.Mode.init();
   }
 
   window.ESB.relayout = relayout;
