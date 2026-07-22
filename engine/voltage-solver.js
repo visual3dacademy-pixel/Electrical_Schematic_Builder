@@ -1,4 +1,4 @@
-// Version 0.1
+// Version 0.2
 //
 // Nodal voltage solver for the schematic builder. Wires and closed devices
 // are collapsed into common electrical nodes. Loads remain resistive edges.
@@ -160,6 +160,18 @@
     });
 
     const fixed = new Map();
+
+    // Earth ground is an absolute 0-V reference. Every permanent or
+    // palette-added ground terminal, and every conductor wired to it, is
+    // fixed to the same zero-potential reference within its own network.
+    state.instances
+      .filter((instance) => instance.typeId === "ground")
+      .forEach((ground) => {
+        const groundNode = nodeOfRef({ kind: "terminal", instanceId: ground.id, terminalId: "t1" });
+        fixed.set(groundNode, 0);
+        nodes.add(groundNode);
+      });
+
     const breakers = state.instances.filter((instance) => instance.typeId === "breaker");
     const main = window.ESB.Sections.getById("main");
 

@@ -1,4 +1,4 @@
-// Version 0.1
+// Version 0.2
 //
 // Device-level electrical behavior for the voltage simulator. This file
 // deliberately contains no graph solving or UI code. It answers only:
@@ -37,6 +37,13 @@
   }
 
   function describe(instance) {
+    const terminalBlockModel = window.ESB.VoltageTerminalBlockModel;
+    const terminalBlockDescription = terminalBlockModel && terminalBlockModel.describe(instance);
+
+    if (terminalBlockDescription) {
+      return terminalBlockDescription;
+    }
+
     const type = window.ESB.SymbolLibrary.getType(instance.typeId);
     const pair = twoTerminalIds(type);
 

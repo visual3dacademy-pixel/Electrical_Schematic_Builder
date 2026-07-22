@@ -1,4 +1,5 @@
-// Version 0.1
+// Version 0.2
+// Ground and capacitor geometry normalized from the user's 2 mm-grid SVGs.
 
 (function () {
   "use strict";
@@ -8,58 +9,61 @@
   const Lib = window.ESB.SymbolLibrary;
   const D = window.ESB.Drawing;
 
-  // Chassis ground. A single terminal hangs off whatever it's wired to;
-  // in the simulation engine this bonds directly to the Common/L2 net.
+  // Earth ground — traced from Assets/SVG/Ground.svg (viewBox 53.25x32.13).
+  // The source terminal center is (5.67,5.67). It is mapped to (-40,0),
+  // an exact application-grid coordinate. The permanent IDU/ODU fixtures
+  // rotate this symbol 90 degrees so the terminal is above the earth mark.
   Lib.register({
     id: "ground",
     category: "reference",
     label: "Ground",
-    width: 60,
-    height: 60,
+    defaultLabel: "",
+    width: 100,
+    height: 70,
     isGround: true,
-    terminals: [{ id: "t1", x: 0, y: -30 }],
-    labelAnchor: { x: 22, y: -10 },
+    terminals: [{ id: "t1", x: -40, y: 0 }],
+    labelAnchor: null,
     draw(parent) {
-      D.line(0, -30, 0, -12, {}, parent);
-      D.line(-15, -12, 15, -12, {}, parent);
-      [-10, 0, 10].forEach((x) => {
-        D.line(x, -12, x - 8, 2, {}, parent);
-      });
+      const g = D.group({ transform: "translate(-48.505,-8.505) scale(1.5)" }, parent);
+      const sw = { width: 0.71 };
+      D.polyline([
+        { x: 52.89, y: 29.7 },
+        { x: 47.5, y: 21.31 },
+        { x: 23.2, y: 21.31 },
+        { x: 28.29, y: 31.78 }
+      ], sw, g);
+      D.polyline([
+        { x: 40.73, y: 30.68 },
+        { x: 23.56, y: 5.67 },
+        { x: 10.98, y: 5.67 },
+        { x: 5.67, y: 5.67 }
+      ], sw, g);
     }
   });
 
-  // Vertical, polarized-style capacitor — traced from Assets/SVG/Capacitor.svg
-  // (updated viewBox 38.96x84.69). Terminal centers there are (19.48,8.23)
-  // and (19.48,76.46). Scaled down close to half the library's usual size
-  // (terminal span 80, not exactly-half 75) — scale=80/68.23=1.1725. 80,
-  // not 75, deliberately: it's a multiple of Config.PLACEMENT_GRID (20),
-  // so a placed instance's terminals always land exactly on the grid
-  // instead of at a fractional Y. Terminal dots themselves stay the
-  // standard 5.5px (drawn generically by symbol-library.js).
+  // Capacitor — traced from Capacitor(1).svg (viewBox 26.46x43.86).
+  // Source terminal centers are (13.23,5.67) and (13.23,38.20).
+  // Uniform scale 2.45927 maps the 32.53-unit source span to 80 pixels,
+  // placing both terminal centers exactly at y=-40 and y=+40.
   Lib.register({
     id: "capacitor",
     category: "passive",
     label: "Capacitor",
     defaultLabel: "",
-    width: 70,
-    height: 100,
+    width: 80,
+    height: 110,
     terminals: [
       { id: "t1", x: 0, y: -40 },
       { id: "t2", x: 0, y: 40 }
     ],
-    labelAnchor: { x: 22, y: 0 },
+    labelAnchor: { x: 28, y: 0 },
     draw(parent) {
-      const g = D.group({ transform: "translate(-22.84,-49.65) scale(1.1725)" }, parent);
-      const sw = { width: 0.73 };
-
-      // Leads extended to the exact terminal centers (19.48,8.23) and
-      // (19.48,76.46) — the source art's own lines stop at the terminal
-      // circle's edge, leaving a radius-sized gap to the auto-rendered
-      // terminal dot (which is drawn at the center).
-      D.line(19.48, 76.46, 19.47, 49.98, sw, g);
-      D.line(19.47, 36.42, 19.48, 8.23, sw, g);
-      D.path("M.37,27.68c4.81,5.53,11.79,8.71,19.12,8.71s14.31-3.18,19.12-8.71", sw, g);
-      D.line(38.58, 49.98, .36, 49.98, sw, g);
+      const g = D.group({ transform: "translate(-32.536,-53.943) scale(2.45927)" }, parent);
+      const sw = { width: 0.71 };
+      D.line(13.23, 38.2, 13.23, 24.63, sw, g);
+      D.line(13.23, 21.19, 13.23, 5.67, sw, g);
+      D.path("M.35,15.33c6.18,7.11,16.96,7.86,24.07,1.68.6-.52,1.16-1.08,1.68-1.68", sw, g);
+      D.line(26.11, 24.63, 0.35, 24.63, sw, g);
     }
   });
 })();

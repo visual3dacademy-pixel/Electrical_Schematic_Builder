@@ -1,4 +1,4 @@
-// Version 0.1
+// Version 1.0
 
 (function () {
   "use strict";
@@ -6,7 +6,7 @@
   window.ESB = window.ESB || {};
 
   window.ESB.Config = {
-    VERSION: "1.7",
+    VERSION: "2.7",
     SVG_NS: "http://www.w3.org/2000/svg",
 
     VIEW_W: 1920,
@@ -23,8 +23,12 @@
     TOP_RAIL_Y: 140,
     BOTTOM_RAIL_Y: 1000,
 
-    GRID_SIZE: 40,
+    GRID_SIZE: 20,
     GRID_MAJOR_SIZE: 160,
+
+    // Terminal-center grid derived from the user's 2 mm source-symbol
+    // geometry. This is a screen-space scale, not a millimeter unit.
+    TERMINAL_GRID: 20,
 
     // Snap/hit radius, in design-space pixels, for wire endpoints/terminals.
     // The visible terminal dot itself is much smaller (r=5.5) — these are

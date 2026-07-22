@@ -1,4 +1,4 @@
-// Version 0.4
+// Version 0.5
 //
 // Static palette panel occupying the left Config.PALETTE_W strip of the
 // stage. Text-only rows (no glyph preview) — canvas-interactions.js reads
@@ -22,6 +22,7 @@
   const ROW_H = 46;
 
   const SPECIAL_ENTRIES = [
+    { paletteType: "thermoswitch_picker", label: "Thermoswitch" },
     { paletteType: "relay_spst", label: "SPST Relay" },
     { paletteType: "relay_spdt", label: "SPDT Relay" }
   ];

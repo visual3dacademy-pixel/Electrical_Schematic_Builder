@@ -1,13 +1,5 @@
-// Version 0.5
-//
-// Transformer, Fuse, and Circuit Breaker geometry is traced from the
-// user's reference SVGs (Assets/SVG/*.svg — industry-standard symbols),
-// not hand-approximated. Each draw() wraps the *exact*, unmodified source
-// path/line coordinates in a translate+scale group — that keeps every
-// curve numerically identical to the reference art while normalizing
-// each symbol's terminal-to-terminal span to match the rest of the
-// library. Only the terminal positions and the transform's two numbers
-// are computed by hand; every other coordinate is a verbatim copy.
+// Version 0.6
+// Transformer and fuse redrawn from the user's latest 2 mm-grid SVGs.
 
 (function () {
   "use strict";
@@ -17,23 +9,17 @@
   const Lib = window.ESB.SymbolLibrary;
   const D = window.ESB.Drawing;
 
-  // Transformer — Assets/SVG/Transfomrer.svg (viewBox 158.28x107.82).
-  // Terminal circle centers there: H1(7.88,7.87) H2(150.41,7.87)
-  // X1(7.88,99.94) X2(150.41,99.94). scale=1.7378 is chosen so the
-  // vertical H-to-X span becomes exactly 160 (Config.SECTION_GAP) —
-  // required so the transformer still bridges the main ladder's bottom
-  // rail and the low-voltage section's top rail exactly (see
-  // Sections.addLowVoltageSection and the placement special case in
-  // ui/canvas-interactions.js). Fixed vertical orientation only, since
-  // rotation doesn't exist as a feature.
+  // Transformer — traced from Assets/SVG/Transformer.svg (viewBox 112.06x76.39).
+  // Source terminal centers: H1(5.67,5.67), H2(106.40,5.67),
+  // X1(5.67,70.73), X2(106.40,70.73). Uniform scale 2.45927
+  // maps the vertical terminal span to exactly 160 pixels and the
+  // horizontal terminal span to approximately 248 pixels, matching the
+  // existing bridge recipe without distorting the authored symbol.
   Lib.register({
     id: "transformer",
     category: "power",
     label: "Transformer",
     designatorPrefix: "T",
-    // Its Y is fixed at placement time (bridging the main ladder's bottom
-    // rail and the low-voltage section's top rail) — a learner can still
-    // slide it left/right, but not off of that bridging height.
     lockVertical: true,
     width: 280,
     height: 220,
@@ -43,61 +29,48 @@
       { id: "x1", x: -124, y: 80 },
       { id: "x2", x: 124, y: 80 }
     ],
-    labelAnchor: { x: 0, y: -100 },
+    labelAnchor: { x: 0, y: -106 },
     draw(parent) {
-      const g = D.group({ transform: "translate(-137.53,-93.68) scale(1.7378)" }, parent);
-      const sw = { width: 1.73 };
-
-      D.line(108.45, 99.96, 150.41, 99.94, sw, g);
-      D.path("M30.23,7.88c1.84,9.21,5.63,15.04,9.77,15.04s7.93-5.83,9.77-15.04", sw, g);
-      D.path("M49.79,7.88c1.84,9.21,5.63,15.04,9.77,15.04s7.93-5.83,9.77-15.04", sw, g);
-      D.path("M69.35,7.88c1.84,9.21,5.63,15.04,9.77,15.04s7.93-5.83,9.77-15.04", sw, g);
-      D.path("M88.91,7.88c1.84,9.21,5.63,15.04,9.77,15.04s7.93-5.83,9.77-15.04", sw, g);
-      D.path("M108.5,7.88c1.84,9.21,5.63,15.04,9.77,15.04s7.93-5.83,9.77-15.04", sw, g);
-      // Four leads below are extended to the exact terminal centers
-      // (7.88,7.87) (150.41,7.87) (7.88,99.94) (150.41,99.94) — the source
-      // art's lines stop at the terminal circle's edge, leaving a
-      // radius-sized gap to the auto-rendered terminal dot.
-      D.line(30.21, 7.89, 7.88, 7.87, sw, g);
-      D.path("M69.34,99.97c-1.84-9.21-5.63-15.04-9.77-15.04s-7.93,5.83-9.77,15.04", sw, g);
-      D.path("M88.9,99.97c-1.84-9.21-5.63-15.04-9.77-15.04s-7.93,5.83-9.77,15.04", sw, g);
-      D.path("M108.46,99.97c-1.84-9.21-5.63-15.04-9.77-15.04s-7.93,5.83-9.77,15.04", sw, g);
-      D.line(49.77, 99.96, 7.88, 99.94, sw, g);
-      D.line(30.21, 37.05, 128.04, 37.05, sw, g);
-      D.line(30.21, 70.8, 128.04, 70.8, sw, g);
-      D.line(128.04, 7.89, 150.41, 7.87, sw, g);
-
+      const g = D.group({ transform: "translate(-137.94,-93.94) scale(2.45927)" }, parent);
+      const sw = { width: 0.71 };
+      D.line(76.77, 70.73, 106.4, 70.73, sw, g);
+      D.path("M35.29,5.67c-.75,3.75-1.97,6.79-3.49,8.64-3.82,4.69-8.45.82-10.34-8.64", sw, g);
+      D.path("M49.12,5.67c-.75,3.75-1.97,6.79-3.49,8.64-3.82,4.69-8.45.82-10.34-8.64", sw, g);
+      D.path("M62.94,5.67c-.75,3.75-1.97,6.79-3.49,8.64-3.82,4.69-8.45.82-10.34-8.64", sw, g);
+      D.path("M76.77,5.67c-.75,3.75-1.97,6.79-3.49,8.64-3.82,4.69-8.45.82-10.34-8.64", sw, g);
+      D.path("M90.59,5.67c-.75,3.75-1.97,6.79-3.49,8.64-3.82,4.69-8.45.82-10.34-8.64", sw, g);
+      D.line(21.47, 5.67, 5.67, 5.67, sw, g);
+      D.path("M49.12,70.73c-1.89-9.46-6.52-13.33-10.34-8.64-1.51,1.86-2.74,4.89-3.49,8.64", sw, g);
+      D.path("M62.94,70.73c-1.89-9.46-6.52-13.33-10.34-8.64-1.51,1.86-2.74,4.89-3.49,8.64", sw, g);
+      D.path("M76.77,70.73c-1.89-9.46-6.52-13.33-10.34-8.64-1.51,1.86-2.74,4.89-3.49,8.64", sw, g);
+      D.line(35.29, 70.73, 5.67, 70.73, sw, g);
+      D.line(21.47, 27.35, 90.59, 27.35, sw, g);
+      D.line(21.47, 49.04, 90.59, 49.04, sw, g);
+      D.line(90.59, 5.67, 106.4, 5.67, sw, g);
       D.text(0, 0, "24 VAC", 15, 700, "#1a2230", {}, parent);
     }
   });
 
-  // Fuse — Assets/SVG/Fuse.svg (updated viewBox 120.78x32.91). Terminal
-  // centers (8.23,16.46) and (112.54,16.46); scale=150/104.31=1.438
-  // normalizes the span to 150, matching every other 2-terminal
-  // horizontal symbol.
+  // Fuse — traced from Fuse(1).svg (viewBox 76.39x20.50).
+  // Source terminal centers (5.67,10.25) and (70.73,10.25) are mapped
+  // to -80/+80, providing an exact 160-pixel grid-aligned span.
   Lib.register({
     id: "fuse",
     category: "protective",
     label: "Fuse",
     designatorPrefix: "FU",
-    width: 150,
-    height: 90,
+    width: 180,
+    height: 70,
     canFault: true,
     terminals: [
-      { id: "t1", x: -75, y: 0 },
-      { id: "t2", x: 75, y: 0 }
+      { id: "t1", x: -80, y: 0 },
+      { id: "t2", x: 80, y: 0 }
     ],
-    labelAnchor: { x: 0, y: -46 },
+    labelAnchor: { x: 0, y: -42 },
     draw(parent) {
-      const g = D.group({ transform: "translate(-86.83,-23.67) scale(1.438)" }, parent);
-      const sw = { width: 2.09 };
-
-      // Leads extended to the exact terminal centers (8.23,16.46) and
-      // (112.54,16.46) — see the transformer comment above for why.
-      D.line(112.54, 16.46, 92.58, 16.47, sw, g);
-      D.path("M60.39,16.46c0,8.89,7.21,16.1,16.1,16.1s16.1-7.21,16.1-16.1", sw, g);
-      D.path("M60.39,16.46c0,-8.89,-7.21,-16.1,-16.1,-16.1s-16.1,7.21,-16.1,16.1", sw, g);
-      D.line(28.2, 16.47, 8.23, 16.46, sw, g);
+      const g = D.group({ transform: "translate(-93.944,-25.207) scale(2.45927)" }, parent);
+      const sw = { width: 0.71 };
+      D.path("M70.73,10.25h-12.74c0,5.47-4.43,9.9-9.9,9.9-5.47,0-9.9-4.43-9.9-9.9S33.77.35,28.3.35s-9.9,4.43-9.9,9.9H5.67", sw, g);
     }
   });
 

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 216.74 153.14">
+  <defs>
+    <style>
+      .cls-1 {
+        font-family: ArialMT, Arial;
+        font-size: 10.16px;
+      }
+
+      .cls-2 {
+        fill: none;
+        stroke: #000;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: .71px;
+      }
+    </style>
+  </defs>
+  <g id="_0" data-name="0">
+    <g id="ELLIPSE">
+      <path class="cls-2" d="M70.07,109.54c-8.56-5.69-14.96-5.11-14.3,1.3.26,2.54,1.63,5.75,3.9,9.13"/>
+    </g>
+    <g id="ELLIPSE-2" data-name="ELLIPSE">
+      <path class="cls-2" d="M80.47,99.11c-8.56-5.69-14.96-5.11-14.3,1.3.26,2.54,1.63,5.75,3.9,9.13"/>
+    </g>
+    <g id="ELLIPSE-3" data-name="ELLIPSE">
+      <path class="cls-2" d="M90.87,88.68c-8.56-5.69-14.96-5.11-14.3,1.3.26,2.54,1.63,5.75,3.9,9.13"/>
+    </g>
+    <g id="LINE">
+      <line class="cls-2" x1="90.87" y1="88.68" x2="103.26" y2="76.26"/>
+    </g>
+    <g id="LINE-2" data-name="LINE">
+      <line class="cls-2" x1="176.57" y1="76.26" x2="103.26" y2="76.26"/>
+    </g>
+    <g id="ELLIPSE-4" data-name="ELLIPSE">
+      <path class="cls-2" d="M59.67,119.97c-8.56-5.69-14.96-5.11-14.3,1.3.27,2.56,1.65,5.8,3.95,9.21"/>
+    </g>
+    <g id="LINE-3" data-name="LINE">
+      <line class="cls-2" x1="176.57" y1="76.26" x2="206.99" y2="76.26"/>
+    </g>
+    <g id="CIRCLE">
+      <circle class="cls-2" cx="103.08" cy="76.57" r="76.22"/>
+    </g>
+    <g id="LINE-4" data-name="LINE">
+      <line class="cls-2" x1="49.83" y1="22.04" x2="10.98" y2="22.04"/>
+    </g>
+    <g id="CIRCLE-2" data-name="CIRCLE">
+      <circle class="cls-2" cx="5.67" cy="22.04" r="5.31"/>
+    </g>
+    <g id="CIRCLE-3" data-name="CIRCLE">
+      <circle class="cls-2" cx="211.69" cy="76.26" r="4.7"/>
+    </g>
+    <g id="LINE-5" data-name="LINE">
+      <line class="cls-2" x1="49.32" y1="130.47" x2="10.37" y2="130.47"/>
+    </g>
+    <g id="CIRCLE-4" data-name="CIRCLE">
+      <circle class="cls-2" cx="5.67" cy="130.47" r="4.7"/>
+    </g>
+    <g id="TEXT">
+      <text class="cls-1" transform="translate(162.26 70.75)"><tspan x="0" y="0">C</tspan></text>
+    </g>
+    <g id="TEXT-2" data-name="TEXT">
+      <text class="cls-1" transform="translate(62.31 26.5)"><tspan x="0" y="0">R</tspan></text>
+    </g>
+    <g id="TEXT-3" data-name="TEXT">
+      <text class="cls-1" transform="translate(61.33 132.73)"><tspan x="0" y="0">S</tspan></text>
+    </g>
+    <g id="ELLIPSE-5" data-name="ELLIPSE">
+      <path class="cls-2" d="M70.07,42.98c-3.39,2.26-6.61,3.62-9.15,3.87-6.41.65-6.97-5.76-1.26-14.3"/>
+    </g>
+    <g id="ELLIPSE-6" data-name="ELLIPSE">
+      <path class="cls-2" d="M80.47,53.41c-3.39,2.26-6.61,3.62-9.15,3.87-6.41.65-6.97-5.76-1.26-14.3"/>
+    </g>
+    <g id="ELLIPSE-7" data-name="ELLIPSE">
+      <path class="cls-2" d="M90.87,63.84c-3.39,2.26-6.61,3.62-9.15,3.87-6.41.65-6.97-5.76-1.26-14.3"/>
+    </g>
+    <g id="LINE-6" data-name="LINE">
+      <line class="cls-2" x1="90.87" y1="63.84" x2="103.26" y2="76.26"/>
+    </g>
+    <g id="ELLIPSE-8" data-name="ELLIPSE">
+      <path class="cls-2" d="M59.67,32.55c-2.93,1.95-5.74,3.23-8.09,3.71-6.88,1.39-8.3-4.34-3.17-12.8"/>
+    </g>
+  </g>
+</svg>

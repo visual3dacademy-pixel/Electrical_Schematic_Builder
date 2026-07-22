@@ -1,4 +1,4 @@
-// Version 0.2
+// Version 0.4
 //
 // Placement/selection/move/delete interactions for instances on the
 // canvas, plus palette-to-canvas drag-and-drop. Wire drawing (Phase 3)
@@ -151,9 +151,9 @@
         return;
       }
 
-      // Filter instances by canvas ID in IDU/ODU single-screen modes
-      // Show instances that either have no canvasId (shared) or match the current canvas
-      if ((mode === "idu" || mode === "odu") && instance.canvasId && instance.canvasId !== mode) {
+      // IDU, ODU, and Check Circuit all show only the active unit's
+      // canvas-scoped instances. Shared instances remain visible.
+      if (!visibleInCurrentMode(instance.canvasId)) {
         return;
       }
 
@@ -503,6 +503,22 @@
     }
   }
 
+  function startPaletteDrag(typeId, event) {
+    dragMode = "new-instance";
+    dragData = { typeId };
+
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    const context = getCanvasContext(event);
+    const svg = context.svg || D.getElements().svg;
+
+    if (svg) {
+      const point = G.clientToStage(svg, event.clientX, event.clientY);
+      renderDragGhost(point, typeId, mode === "split" ? context.canvasId : null);
+    }
+
+    event.preventDefault();
+  }
+
   function onPointerDown(event) {
     const context = getCanvasContext(event);
     const svg = context.svg;
@@ -544,25 +560,17 @@
     if (canEditInstances) {
       const paletteEl = target.closest("[data-palette-type]");
       if (paletteEl) {
-        dragMode = "new-instance";
-        dragData = { typeId: paletteEl.dataset.paletteType };
+        const paletteType = paletteEl.dataset.paletteType;
 
-        // In split mode, a palette pointerdown has no svg yet (the palette
-        // sits outside both canvas panels) — the first pointermove that
-        // lands over a panel supplies the context and ghost instead.
-        if (svg) {
-          const point = G.clientToStage(svg, event.clientX, event.clientY);
-          // The ghost layer lookup only cares which literal split-panel SVG
-          // to draw into — a concept that only exists in split mode itself.
-          // Outside split mode there's a single shared circuitSvg (and a
-          // single dragPreviewLayer already inside it), even though
-          // context.canvasId is "idu"/"odu" there too (for instance
-          // tagging, not panel lookup) — passing it through unconditionally
-          // sent renderDragGhost hunting for a nonexistent "iduCircuitSvg"/
-          // "oduCircuitSvg" element, so the ghost silently never rendered.
-          renderDragGhost(point, dragData.typeId, mode === "split" ? context.canvasId : null);
+        if (paletteType === "thermoswitch_picker") {
+          if (window.ESB.ThermoswitchPicker) {
+            window.ESB.ThermoswitchPicker.open();
+          }
+          event.preventDefault();
+          return;
         }
-        event.preventDefault();
+
+        startPaletteDrag(paletteType, event);
         return;
       }
     }
@@ -1293,6 +1301,39 @@
     }
   }
 
+  // One permanent Earth Ground reference belongs to each unit canvas.
+  // These fixtures are locked, grid-aligned, and always available as a
+  // wire/meter terminal in Build and Check Circuit views. The symbol is
+  // rotated vertically so its open terminal sits directly above the earth
+  // mark beneath the unit title.
+  function createBuiltInEarthGrounds() {
+    const main = window.ESB.Sections.getById("main");
+    if (!main) return;
+
+    const centerX = (main.leftX + main.rightX) / 2;
+    const centerY = 130; // terminal lands below the symbol after -90-degree rotation
+
+    ["idu", "odu"].forEach((canvasId) => {
+      const alreadyExists = S.state.instances.some((instance) => {
+        return instance.typeId === "ground" && instance.canvasId === canvasId && instance.params && instance.params.permanentEarthGround;
+      });
+
+      if (alreadyExists) return;
+
+      const ground = S.createInstance("ground", centerX, centerY, {
+        label: "",
+        locked: true,
+        canvasId
+      });
+      // The normalized ground glyph is already drawn in the visual
+      // orientation produced by a -90° rotation of the original CAD/SVG
+      // source: terminal at left, earth mark extending to the right.
+      // Keep the instance at 0° so it matches the supplied reference image.
+      ground.rotation = 0;
+      ground.params.permanentEarthGround = true;
+    });
+  }
+
   // Two Circuit Breakers, permanently in series at the top of L1 and L2 —
   // no longer a palette item (see symbols-power.js), created once here
   // instead. Rotated so each one's terminal pair runs vertically: the
@@ -1346,12 +1387,15 @@
       createBuiltInBreakers();
     }
 
+    createBuiltInEarthGrounds();
+
     renderInstances();
     renderSelection();
   }
 
   window.ESB.CanvasInteractions = {
     init,
+    startPaletteDrag,
     renderInstances,
     renderSelection
   };

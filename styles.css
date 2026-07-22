@@ -486,3 +486,147 @@ body {
 #voltageReadout[data-state="error"] {
   color: #b42318;
 }
+
+/* Thermoswitch selection menu — Version 0.1 */
+.thermoswitch-picker {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(17, 24, 39, 0.34);
+}
+
+.thermoswitch-picker.is-open {
+  display: flex;
+}
+
+.thermoswitch-picker__dialog {
+  width: 620px;
+  max-width: calc(100% - 64px);
+  padding: 26px;
+  border: 1px solid #dce2ea;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 22px 55px rgba(15, 23, 42, 0.26);
+}
+
+.thermoswitch-picker__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.thermoswitch-picker__header h2 {
+  margin: 0;
+  color: #253044;
+  font: 800 24px/1.2 Arial, Helvetica, sans-serif;
+}
+
+.thermoswitch-picker__close {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #5b6573;
+  font: 400 32px/34px Arial, Helvetica, sans-serif;
+  cursor: pointer;
+}
+
+.thermoswitch-picker__close:hover {
+  background: #f0f3f7;
+  color: #182235;
+}
+
+.thermoswitch-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.thermoswitch-picker__option {
+  min-height: 78px;
+  padding: 16px 18px;
+  border: 1px solid #dce2ea;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #2a3340;
+  text-align: left;
+  font: 700 18px/1.25 Arial, Helvetica, sans-serif;
+  cursor: grab;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.thermoswitch-picker__option:hover {
+  border-color: #2377e8;
+  box-shadow: 0 7px 18px rgba(35, 119, 232, 0.14);
+  transform: translateY(-1px);
+}
+
+.thermoswitch-picker__option:active {
+  cursor: grabbing;
+}
+
+/* ================================================================
+   Circuit zoom control — v0.2
+   Positioned immediately to the right of the Build/Check controls.
+   ================================================================ */
+.circuit-zoom-control {
+  position: absolute;
+  left: calc(13.5417% + 14px);
+  bottom: 16px;
+  z-index: 26;
+  width: 168px;
+  padding: 9px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid #d6dde7;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 12px rgba(25, 42, 66, 0.12);
+  color: #2a3340;
+  font-family: Arial, Helvetica, sans-serif;
+  pointer-events: auto;
+}
+
+.circuit-zoom-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  line-height: 1;
+}
+
+.circuit-zoom-label {
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.circuit-zoom-value {
+  min-width: 28px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 800;
+  color: #2377e8;
+}
+
+.circuit-zoom-range {
+  width: 100%;
+  margin: 0;
+  accent-color: #2377e8;
+  cursor: pointer;
+}
+
+.circuit-zoom-control.is-disabled {
+  opacity: 0.48;
+  box-shadow: none;
+}
+
+.circuit-zoom-control.is-disabled .circuit-zoom-range {
+  cursor: not-allowed;
+}

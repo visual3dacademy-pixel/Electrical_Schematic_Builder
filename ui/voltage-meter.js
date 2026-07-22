@@ -1,8 +1,9 @@
-// Version 0.3
+// Version 0.4
 //
-// Temporary voltage readout for Check Circuit mode. The meter only measures
-// when BOTH probe tips are on visible component terminal nodes (open circles).
-// Wires, rails, and junction dots are not valid probe targets in this version.
+// Temporary voltage readout for Check Circuit mode. The meter measures when
+// BOTH probe tips are on valid electrical test points: visible component
+// terminals (open circles) or the vertical line-voltage / low-voltage rails.
+// Earth Ground is a normal terminal fixed at 0 V by the voltage solver.
 // The future layered SVG meter can replace this UI without changing the
 // voltage solver.
 
@@ -27,15 +28,14 @@
 
     const Lib = window.ESB.SymbolLibrary;
     const candidates = [];
+    const targetCanvasId = canvasId || null;
 
+    // Component terminals are checked first. This includes the built-in
+    // breaker circles, load terminals, transformer terminals, TSTAT rows,
+    // and the permanent Earth Ground terminal.
     S.state.instances.forEach((instance) => {
       if (instance.typeId.indexOf("meter_lead_") === 0) return;
 
-      // Meter leads are shared overlay objects and normally have no canvasId.
-      // In Check Circuit mode the probe target must instead be scoped to the
-      // currently selected IDU/ODU circuit. Shared items (such as the built-in
-      // breakers) remain valid on either screen.
-      const targetCanvasId = canvasId || null;
       const instanceCanvasId = instance.canvasId || null;
       if (targetCanvasId && instanceCanvasId && instanceCanvasId !== targetCanvasId) return;
 
@@ -44,7 +44,10 @@
 
       type.terminals.forEach((terminal) => {
         const terminalPoint = G.terminalWorldPoint(instance, terminal.id);
+        if (!terminalPoint) return;
+
         candidates.push({
+          priority: 0,
           ref: {
             kind: "terminal",
             instanceId: instance.id,
@@ -55,7 +58,37 @@
       });
     });
 
-    candidates.sort((a, b) => a.distance - b.distance);
+    // Every vertical rail is an electrical bus. A probe can touch anywhere
+    // along its rendered span, and every point on the same rail resolves to
+    // the same net because engine/netlist.js intentionally ignores rail Y.
+    const Sections = window.ESB.Sections;
+    if (Sections && typeof Sections.getAll === "function") {
+      Sections.getAll().forEach((section) => {
+        [
+          { side: "left", railId: section.leftRailId, x: section.leftX },
+          { side: "right", railId: section.rightRailId, x: section.rightX }
+        ].forEach((rail) => {
+          const bounds = Sections.getRailBounds(section, rail.side);
+          if (!bounds) return;
+
+          const nearestY = Math.max(bounds.topY, Math.min(bounds.bottomY, point.y));
+          const dx = point.x - rail.x;
+          const dy = point.y - nearestY;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          candidates.push({
+            priority: 1,
+            ref: { kind: "rail", railId: rail.railId, y: nearestY },
+            distance
+          });
+        });
+      });
+    }
+
+    candidates.sort((a, b) => {
+      if (Math.abs(a.distance - b.distance) > 0.001) return a.distance - b.distance;
+      return a.priority - b.priority;
+    });
 
     const nearest = candidates[0] || null;
     const hitRadius = Number(C.TERMINAL_HIT_RADIUS) || 28;
@@ -69,6 +102,7 @@
     const magnitude = Math.abs(value);
 
     if (Math.abs(magnitude - 240) <= 30) return 240;
+    if (Math.abs(magnitude - 120) <= 20) return 120;
     if (Math.abs(magnitude - 24) <= 6) return 24;
     return 0;
   }
@@ -105,8 +139,9 @@
       ? terminalRefAtProbe({ x: red.x, y: red.y }, activeCanvasId)
       : null;
 
-    // Both probes must be on open-circle component terminals. A floating
-    // probe, a probe on a wire, or a probe on a rail intentionally reads 0.0.
+    // Both probes must be on valid test points. Valid points are component
+    // terminals/open circles or any point along a rendered voltage rail.
+    // A floating probe still reads 0.0 VAC.
     if (!blackRef || !redRef) {
       setZeroReading();
       return;

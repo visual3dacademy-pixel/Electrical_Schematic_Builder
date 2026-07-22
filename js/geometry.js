@@ -1,4 +1,4 @@
-// Version 0.1
+// Version 0.2
 
 (function () {
   "use strict";
@@ -14,12 +14,48 @@
   // portion of a tall canvas to a much smaller y — reading as "the wire/
   // component landed way above where I clicked."
   function clientToStage(svgEl, clientX, clientY) {
+    if (!svgEl) {
+      return null;
+    }
+
+    // Use the browser's live SVG transformation matrix instead of manually
+    // scaling against getBoundingClientRect(). This correctly accounts for:
+    // - a zoomed viewBox whose x/y origin is no longer 0,0
+    // - preserveAspectRatio letterboxing
+    // - responsive CSS scaling
+    // - scrolling and page offsets
+    // - any future transforms applied to the SVG viewport
+    const screenMatrix = svgEl.getScreenCTM();
+
+    if (screenMatrix && typeof screenMatrix.inverse === "function") {
+      const point = svgEl.createSVGPoint();
+      point.x = clientX;
+      point.y = clientY;
+
+      try {
+        const stagePoint = point.matrixTransform(screenMatrix.inverse());
+        return {
+          x: stagePoint.x,
+          y: stagePoint.y
+        };
+      } catch (error) {
+        // Fall through to the defensive manual conversion below.
+      }
+    }
+
+    // Defensive fallback for browsers that temporarily return no CTM while
+    // the SVG is hidden or being relaid out. Include the live viewBox origin;
+    // omitting viewBox.x/y was the original zoom-drag bug.
     const rect = svgEl.getBoundingClientRect();
     const viewBox = svgEl.viewBox.baseVal;
 
+    if (!rect.width || !rect.height) {
+      return null;
+    }
+
     return {
-      x: ((clientX - rect.left) / rect.width) * viewBox.width,
-      y: ((clientY - rect.top) / rect.height) * viewBox.height
+      x: viewBox.x + ((clientX - rect.left) / rect.width) * viewBox.width,
+      y: viewBox.y + ((clientY - rect.top) / rect.height) * viewBox.height
     };
   }
 

@@ -1,4 +1,4 @@
-<!-- Version 1.4 -->
+<!-- Version 2.5 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Electrical Schematic Builder</title>
 
-  <link rel="stylesheet" href="styles.css?v=1.1" />
+  <link rel="stylesheet" href="styles.css?v=1.2" />
   <link rel="preload" as="image" href="SVG/V3D%20academy_home_screen.svg?v=2" />
 </head>
 
@@ -88,32 +88,36 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=0.8"></script>
-  <script src="js/geometry.js?v=0.4"></script>
+  <script src="js/config.js?v=1.2"></script>
+  <script src="js/geometry.js?v=0.5"></script>
   <script src="js/state.js?v=1.1"></script>
   <script src="js/svg-drawing.js?v=0.4"></script>
   <script src="js/sections.js?v=0.8"></script>
 
   <script src="symbols/symbol-library.js?v=0.2"></script>
   <script src="symbols/symbols-coil-contact.js?v=0.2"></script>
-  <script src="symbols/symbols-power.js?v=1.0"></script>
+  <script src="symbols/symbols-power.js?v=1.1"></script>
   <script src="symbols/symbols-hvac-inputs.js?v=0.7"></script>
-  <script src="symbols/symbols-loads.js?v=0.5"></script>
-  <script src="symbols/symbols-misc.js?v=0.7"></script>
+  <script src="symbols/symbols-loads.js?v=0.7"></script>
+  <script src="symbols/symbols-misc.js?v=0.8"></script>
   <script src="symbols/symbols-meter.js?v=0.3"></script>
+  <script src="symbols/symbols-thermoswitches.js?v=0.3"></script>
 
   <script src="engine/netlist.js?v=0.2"></script>
-  <script src="engine/voltage-device-model.js?v=0.1"></script>
-  <script src="engine/voltage-solver.js?v=0.1"></script>
+  <script src="engine/voltage-terminal-block-model.js?v=0.1"></script>
+  <script src="engine/voltage-device-model.js?v=0.2"></script>
+  <script src="engine/voltage-solver.js?v=0.2"></script>
 
   <script src="ui/palette.js?v=0.9"></script>
-  <script src="ui/canvas-interactions.js?v=3.4"></script>
+  <script src="ui/thermoswitch-picker.js?v=0.2"></script>
+  <script src="ui/canvas-interactions.js?v=3.6"></script>
   <script src="ui/wire-tool.js?v=2.8"></script>
   <script src="ui/label-editor.js?v=0.1"></script>
   <script src="ui/breaker-control.js?v=0.1"></script>
-  <script src="ui/mode.js?v=1.9"></script>
-  <script src="ui/voltage-meter.js?v=0.3"></script>
+  <script src="ui/mode.js?v=2.1"></script>
+  <script src="ui/voltage-meter.js?v=0.4"></script>
+  <script src="ui/circuit-zoom.js?v=0.2"></script>
 
-  <script src="script.js?v=1.1"></script>
+  <script src="script.js?v=1.2"></script>
 </body>
 </html>

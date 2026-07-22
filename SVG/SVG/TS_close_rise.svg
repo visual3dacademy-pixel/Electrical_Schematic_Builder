@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 54.64 40.56">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: none;
+        stroke: #000;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-width: .71px;
+      }
+    </style>
+  </defs>
+  <g id="_0" data-name="0">
+    <g id="CIRCLE">
+      <circle class="cls-1" cx="5.63" cy="5.63" r="5.28"/>
+    </g>
+    <g id="LWPOLYLINE">
+      <polyline class="cls-1" points="28.33 13.19 28.33 21.01 36.14 21.01 36.14 29.79 28.33 29.79 28.33 40.2"/>
+    </g>
+    <g id="CIRCLE-2" data-name="CIRCLE">
+      <circle class="cls-1" cx="49" cy="5.63" r="5.28"/>
+    </g>
+    <g id="LINE">
+      <line class="cls-1" x1="10.89" y1="5.63" x2="45.77" y2="20.75"/>
+    </g>
+  </g>
+</svg>

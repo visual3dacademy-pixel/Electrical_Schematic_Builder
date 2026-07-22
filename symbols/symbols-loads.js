@@ -1,4 +1,4 @@
-// Version 0.1
+// Version 0.7
 
 (function () {
   "use strict";
@@ -32,96 +32,107 @@
     }
   });
 
+  // Heating element — redrawn from the user's Heater.svg. The source
+  // terminal centers are 86.74 units apart and are normalized to a
+  // 160-design-pixel span so both open circles land exactly on the
+  // builder's 20-pixel terminal grid.
   Lib.register({
     id: "resistor_heater",
     category: "load",
     label: "Heating Element",
     designatorPrefix: "HTR",
-    width: 150,
-    height: 70,
+    width: 180,
+    height: 80,
     isLoad: true,
     terminals: [
-      { id: "t1", x: -75, y: 0 },
-      { id: "t2", x: 75, y: 0 }
+      { id: "t1", x: -80, y: 0 },
+      { id: "t2", x: 80, y: 0 }
     ],
-    labelAnchor: { x: 0, y: -38 },
+    labelAnchor: { x: 0, y: -34 },
     draw(parent) {
-      D.line(-75, 0, -50, 0, {}, parent);
-      D.line(50, 0, 75, 0, {}, parent);
-      D.polyline(
-        [
-          { x: -50, y: 0 },
-          { x: -37.5, y: -20 },
-          { x: -12.5, y: 20 },
-          { x: 12.5, y: -20 },
-          { x: 37.5, y: 20 },
-          { x: 50, y: 0 }
-        ],
-        {},
-        parent
-      );
+      const scale = 160 / 86.74;
+      const sourceCenterX = (5.67 + 92.41) / 2;
+      const sourceCenterY = 12.55;
+      const g = D.group({
+        transform: `translate(${-sourceCenterX * scale},${-sourceCenterY * scale}) scale(${scale})`
+      }, parent);
+
+      D.polyline([
+        { x: 5.67, y: 12.55 },
+        { x: 10.98, y: 12.55 },
+        { x: 15.49, y: 12.55 },
+        { x: 21.59, y: 0.35 },
+        { x: 27.69, y: 24.75 },
+        { x: 33.79, y: 0.35 },
+        { x: 39.89, y: 24.75 },
+        { x: 45.99, y: 0.35 },
+        { x: 52.09, y: 24.75 },
+        { x: 58.19, y: 0.35 },
+        { x: 64.29, y: 24.75 },
+        { x: 70.39, y: 0.35 },
+        { x: 76.49, y: 24.75 },
+        { x: 82.59, y: 12.55 },
+        { x: 87.1, y: 12.55 },
+        { x: 92.41, y: 12.55 }
+      ], { width: 0.71 }, g);
     }
   });
 
-  // 2-speed PSC blower motor — Assets/SVG/Blower Motor.svg (viewBox
-  // 278.61x192.86). Run (R) and Start (S) windings converge at a common
-  // junction, with a Low-speed tap partway along the Run winding and the
-  // High-speed/Common lead exiting the junction itself. Terminal circle
-  // centers there: R(6.52,18.75) S(7.29,174.68) LOW(272.10,43.10)
-  // HIGH(272.10,96.03); the group is centered on the motor body circle
-  // (125.57,96.43) at scale 1 (the source is already close to this
-  // library's usual component size, so no normalization needed). R/S/
-  // LOW/HIGH/C are fixed terminal identities traced from the source
-  // text positions, so they're baked into draw() rather than the
-  // generic (single, editable) designator label.
+  // Blower motor — proportionally normalized from the supplied Blower.svg.
+  // The source symbol was authored on the user's 2 mm reference grid. The
+  // complete motor geometry is enlarged 4/3 so the R and S terminal centers
+  // land exactly three main-row intervals above/below the motor center
+  // (±80 px). Their visible leads and open-circle metadata therefore sit on
+  // the same horizontal snap rows used by wires and component placement.
   Lib.register({
     id: "blower_2speed",
     category: "load",
-    label: "2 Speed Blower",
+    label: "Blower Motor",
     designatorPrefix: "BM",
-    width: 300,
-    height: 210,
+    width: 320,
+    height: 250,
     isLoad: true,
     terminals: [
-      { id: "r", x: -119.05, y: -77.68 },
-      { id: "s", x: -118.28, y: 78.25 },
-      { id: "low", x: 146.53, y: -53.33 },
-      { id: "high", x: 146.53, y: -0.4 }
+      { id: "r", x: -140, y: -80 },
+      { id: "s", x: -140, y: 80 },
+      { id: "c", x: 140, y: 0 }
     ],
-    labelAnchor: { x: 0, y: -110 },
+    labelAnchor: { x: 0, y: -124 },
     draw(parent) {
-      const g = D.group({ transform: "translate(-125.57,-96.43)" }, parent);
-      const sw = { width: 3 };
+      const sw = { width: 0.71 };
+      const bodyScale = 4 / 3;
+      const radius = 76.22 * bodyScale;
+      const terminalY = 80;
+      const leftLeadEdgeX = -Math.sqrt((radius * radius) - (terminalY * terminalY));
 
-      D.circle(125.57, 96.43, 96.07, { fill: "#ffffff", "stroke-width": 3 }, g);
+      // All three external leads are perfectly horizontal. R and S terminal
+      // circles are at y=-80/+80, exact application row coordinates, and the
+      // inner ends meet the motor-circle perimeter mathematically.
+      D.circle(0, 0, radius, { fill: "#ffffff", width: 0.71 }, parent);
+      D.line(-140, -terminalY, leftLeadEdgeX, -terminalY, sw, parent);
+      D.line(-140, terminalY, leftLeadEdgeX, terminalY, sw, parent);
+      D.line(radius, 0, 140, 0, sw, parent);
 
-      D.path("M95.47,148.97c-8.71-2.92-15.5-2.53-17.52.99-2.02,3.52,1.08,9.57,8,15.62", sw, g);
-      D.path("M104.98,132.36c-8.71-2.92-15.5-2.53-17.52.99s1.08,9.57,8,15.62", sw, g);
-      D.path("M114.49,115.78c-8.71-2.92-15.5-2.53-17.52.99s1.08,9.57,8,15.62", sw, g);
-      D.polyline([{ x: 114.49, y: 115.79 }, { x: 125.81, y: 96.03 }, { x: 114.2, y: 76.44 }], sw, g);
-      D.line(221.64, 96.03, 125.81, 96.03, sw, g);
-      D.path("M85.96,165.55c-6.8-2.28-12.54-2.57-15.65-.81s-3.3,5.41-.49,9.94", sw, g);
-      // HIGH/R/LOW/S leads below are extended to the exact terminal
-      // centers R(6.52,18.75) S(7.29,174.68) LOW(272.10,43.10)
-      // HIGH(272.10,96.03) — the source art's lines stop at the terminal
-      // circle's edge, leaving a radius-sized gap to the auto-rendered dot.
-      D.line(221.64, 96.03, 272.1, 96.03, sw, g);
-      D.line(69.04, 18.76, 6.52, 18.75, sw, g);
-      D.path("M85.96,26.5c-6.92,6.04-10.02,12.09-8,15.62,2.02,3.52,8.81,3.9,17.52.99", sw, g);
-      D.path("M95.46,43.09c-6.92,6.04-10.02,12.09-8,15.62,2.02,3.52,8.81,3.9,17.52.99", sw, g);
-      D.path("M104.97,59.67c-6.92,6.04-10.02,12.09-8,15.62,2.02,3.52,8.81,3.9,17.52.99", sw, g);
-      D.path("M69.05,18.76c-2.09,4.15-1.45,7.35,1.76,8.82s8.72,1.09,15.15-1.06", sw, g);
-      D.line(272.1, 43.1, 95.45, 43.11, sw, g);
-      D.line(69.82, 174.68, 7.29, 174.68, sw, g);
+      // Scale the supplied winding geometry with the motor body so its
+      // proportions remain faithful to the original SVG.
+      const g = D.group({
+        transform: `scale(${bodyScale}) translate(-103.08,-76.57)`
+      }, parent);
+      D.path("M70.07,109.54c-8.56-5.69-14.96-5.11-14.3,1.3.26,2.54,1.63,5.75,3.9,9.13", sw, g);
+      D.path("M80.47,99.11c-8.56-5.69-14.96-5.11-14.3,1.3.26,2.54,1.63,5.75,3.9,9.13", sw, g);
+      D.path("M90.87,88.68c-8.56-5.69-14.96-5.11-14.3,1.3.26,2.54,1.63,5.75,3.9,9.13", sw, g);
+      D.line(90.87, 88.68, 103.26, 76.26, sw, g);
+      D.line(176.57, 76.26, 103.26, 76.26, sw, g);
+      D.path("M59.67,119.97c-8.56-5.69-14.96-5.11-14.3,1.3.27,2.56,1.65,5.8,3.95,9.21", sw, g);
+      D.path("M70.07,42.98c-3.39,2.26-6.61,3.62-9.15,3.87-6.41.65-6.97-5.76-1.26-14.3", sw, g);
+      D.path("M80.47,53.41c-3.39,2.26-6.61,3.62-9.15,3.87-6.41.65-6.97-5.76-1.26-14.3", sw, g);
+      D.path("M90.87,63.84c-3.39,2.26-6.61,3.62-9.15,3.87-6.41.65-6.97-5.76-1.26-14.3", sw, g);
+      D.line(90.87, 63.84, 103.26, 76.26, sw, g);
+      D.path("M59.67,32.55c-2.93,1.95-5.74,3.23-8.09,3.71-6.88,1.39-8.3-4.34-3.17-12.8", sw, g);
 
-      // Text drawn directly on `parent` (not inside `g`) — these
-      // positions are already final local coordinates, not source-space
-      // ones, so they must skip the group's translate.
-      D.text(117, -8, "HIGH", 13, 700, "#1a2230", {}, parent);
-      D.text(110, -59, "LOW", 13, 700, "#1a2230", {}, parent);
-      D.text(82, -8, "C", 13, 700, "#1a2230", {}, parent);
-      D.text(-32, -76, "R", 13, 700, "#1a2230", {}, parent);
-      D.text(-33, 84, "S", 13, 700, "#1a2230", {}, parent);
+      D.text(-78, -80, "R", 11, 400, "#111111", {}, parent);
+      D.text(-79, 84, "S", 11, 400, "#111111", {}, parent);
+      D.text(84, -5, "C", 11, 400, "#111111", {}, parent);
     }
   });
 

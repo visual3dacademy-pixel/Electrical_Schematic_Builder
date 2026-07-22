@@ -1,4 +1,4 @@
-// Version 0.6
+// Version 0.8
 //
 // Mode system: build, check, idu, odu, split
 // - build: Full circuit builder (default)
@@ -147,6 +147,10 @@
     if (paletteSvg) {
       paletteSvg.setAttribute("data-mode", mode);
     }
+
+    if (window.ESB.CircuitZoom) {
+      window.ESB.CircuitZoom.refresh();
+    }
   }
 
   // "Indoor Unit"/"Outdoor Unit", drawn directly into the main circuitSvg
@@ -171,6 +175,7 @@
 
     const centerX = (main.leftX + main.rightX) / 2;
     D.text(centerX, 40, text, 24, 800, "#111111", {}, layer);
+    D.text(centerX, 72, "Earth Ground", 16, 700, "#2a3340", {}, layer);
   }
 
   function clearModeLabel() {
@@ -339,6 +344,9 @@
     // Render rails (power rails) for this canvas
     const main = window.ESB.Sections.getById("main");
     if (main) {
+      const centerX = (main.leftX + main.rightX) / 2;
+      D.text(centerX, 52, "Earth Ground", 16, 700, "#2a3340", {}, railsLayer);
+
       // Draw L1 (left) rail
       D.line(main.leftX, main.topY, main.leftX, main.bottomY,
         { stroke: "#000000", width: 3 }, railsLayer);

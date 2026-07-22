@@ -1,4 +1,4 @@
-// Version 0.8
+// Version 0.9
 
 (function () {
   "use strict";
@@ -25,6 +25,13 @@
     const totalHeight = window.ESB.Sections.getTotalHeight();
 
     svg.setAttribute("viewBox", `0 0 ${C.VIEW_W} ${totalHeight}`);
+
+    // The zoom controller owns any fitted/cropped viewport state. Reapply
+    // it after relayout because relayout necessarily restores the base
+    // full-canvas viewBox first.
+    if (window.ESB.CircuitZoom) {
+      window.requestAnimationFrame(() => window.ESB.CircuitZoom.reapply());
+    }
 
     const staticLayer = document.getElementById("staticLayer");
     Drawing.clearGroup(staticLayer);
@@ -93,6 +100,7 @@
     window.ESB.LabelEditor.init();
     window.ESB.BreakerControl.render();
     window.ESB.Mode.init();
+    window.ESB.CircuitZoom.init();
     window.ESB.Menu.init();
     window.ESB.VoltageMeter.init();
   }
