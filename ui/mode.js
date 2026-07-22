@@ -1,4 +1,4 @@
-// Version 0.4
+// Version 0.6
 //
 // Mode system: build, check, idu, odu, split
 // - build: Full circuit builder (default)
@@ -21,9 +21,14 @@
   // longer a normal entry point now that IDU/ODU/Split are the primary
   // flow).
   let mode = "idu";
+  let activeCanvasMode = "idu";
 
   function getMode() {
     return mode;
+  }
+
+  function getActiveCanvasMode() {
+    return activeCanvasMode;
   }
 
   // Meter graphic is opaque reference art (like the leads — see
@@ -108,10 +113,10 @@
     }
 
     if (mode === "check") {
-      clearModeLabel();
       if (paletteSvg) paletteSvg.style.display = "block";
       ensureLeads();
       renderMeterPanel();
+      renderModeLabel(activeCanvasMode === "idu" ? "Indoor Unit" : "Outdoor Unit");
       window.ESB.CanvasInteractions.renderInstances();
       window.ESB.CanvasInteractions.renderSelection();
     } else if (mode === "idu" || mode === "odu") {
@@ -220,8 +225,11 @@
     const svg = document.createElementNS(C.SVG_NS, "svg");
     svg.setAttribute("id", `${id}CircuitSvg`);
     svg.setAttribute("preserveAspectRatio", "xMidYMin meet");
+    // pinch-zoom (not none): see the matching #circuitSvg comment in
+    // styles.css — keeps single-finger drag under our own pointer-event
+    // logic while still letting the browser handle two-finger pinch-zoom.
     svg.style.cssText =
-      "display:block;width:100%;height:100%;touch-action:none;user-select:none;background:#ffffff;";
+      "display:block;width:100%;height:100%;touch-action:pinch-zoom;user-select:none;background:#ffffff;";
 
     svgWrapper.appendChild(svg);
     container.appendChild(header);
@@ -260,13 +268,23 @@
       panelsRow.appendChild(iduContainer);
       panelsRow.appendChild(oduContainer);
 
+      // Centered and narrower than the panels above (not full-width) so it
+      // reads as its own callout rather than a footer bar — static rules
+      // text, present the whole time split mode is active rather than
+      // being cleared/reused for anything dynamic.
       const instructionBox = document.createElement("div");
       instructionBox.id = "splitInstructionBox";
       instructionBox.style.cssText =
-        "flex-shrink:0;height:90px;margin:12px;border:2px solid #2377e8;border-radius:8px;" +
-        "display:flex;align-items:center;justify-content:center;color:#5a6472;" +
-        "font:600 14px Arial, Helvetica, sans-serif;background:#f8fafc;";
-      instructionBox.textContent = "";
+        "flex-shrink:0;width:60%;max-width:640px;min-height:170px;margin:12px auto;" +
+        "border:2px solid #2377e8;border-radius:8px;padding:16px 24px;box-sizing:border-box;" +
+        "display:flex;flex-direction:column;justify-content:center;color:#5a6472;" +
+        "font:600 14px/1.6 Arial, Helvetica, sans-serif;background:#f8fafc;";
+      instructionBox.innerHTML =
+        '<div style="font-weight:800;color:#2a3340;margin-bottom:8px;">Split Screen functions:</div>' +
+        '<ul style="margin:0;padding-left:22px;">' +
+        "<li>Components can be dragged between screens</li>" +
+        "<li>Transformer and TSTAT Terminals are added in IDU &amp; ODU screens</li>" +
+        "</ul>";
 
       splitContainer.appendChild(panelsRow);
       splitContainer.appendChild(instructionBox);
@@ -423,9 +441,24 @@
       return;
     }
 
+    if (nextMode === "idu" || nextMode === "odu") {
+      activeCanvasMode = nextMode;
+    }
+
     mode = nextMode;
     applyMode();
     updateModeButtons();
+  }
+
+  function setCheckCanvas(canvasMode) {
+    if (canvasMode !== "idu" && canvasMode !== "odu") return;
+    activeCanvasMode = canvasMode;
+
+    if (mode === "check") {
+      applyMode();
+      updateModeButtons();
+      if (window.ESB.VoltageMeter) window.ESB.VoltageMeter.refresh();
+    }
   }
 
   function updateModeButtons() {
@@ -440,7 +473,9 @@
     // (build/check), default to offering the two single-canvas entry
     // points and hide Split Screen.
     const buttonsByKey = { idu: iduBtn, odu: oduBtn, split: splitBtn };
-    const hiddenKey = buttonsByKey[mode] ? mode : "split";
+    const hiddenKey = mode === "check"
+      ? activeCanvasMode
+      : (buttonsByKey[mode] ? mode : "split");
 
     Object.keys(buttonsByKey).forEach((key) => {
       const btn = buttonsByKey[key];
@@ -455,8 +490,8 @@
       const isSplitMode = mode === "split";
 
       checkBtn.textContent = isCheckMode ? "Build Circuit" : "Check Circuit";
-      checkBtn.style.opacity = (isCheckMode || isSplitMode) ? "0.5" : "1";
-      checkBtn.disabled = isCheckMode || isSplitMode;
+      checkBtn.style.opacity = isSplitMode ? "0.5" : "1";
+      checkBtn.disabled = isSplitMode;
       checkBtn.title = isSplitMode ? "Check Circuit not available in Split Screen mode" : "";
     }
   }
@@ -495,8 +530,14 @@
     modeContainer.id = "modeButtonContainer";
     modeContainer.style.cssText = "display:flex;gap:8px;";
 
-    const iduBtn = createModeButton("modeIduButton", "IDU", () => setMode("idu"));
-    const oduBtn = createModeButton("modeOduButton", "ODU", () => setMode("odu"));
+    const iduBtn = createModeButton("modeIduButton", "IDU", () => {
+      if (mode === "check") setCheckCanvas("idu");
+      else setMode("idu");
+    });
+    const oduBtn = createModeButton("modeOduButton", "ODU", () => {
+      if (mode === "check") setCheckCanvas("odu");
+      else setMode("odu");
+    });
     const splitBtn = createModeButton("modeSplitButton", "Split Screen", () => setMode("split"));
 
     modeContainer.appendChild(iduBtn);
@@ -515,7 +556,7 @@
     });
 
     checkButton.addEventListener("click", () => {
-      setMode(mode === "check" ? "build" : "check");
+      setMode(mode === "check" ? activeCanvasMode : "check");
     });
 
     bottomBar.appendChild(modeContainer);
@@ -526,5 +567,5 @@
     updateModeButtons();
   }
 
-  window.ESB.Mode = { init, getMode, setMode, refreshSplitCanvases };
+  window.ESB.Mode = { init, getMode, getActiveCanvasMode, setMode, setCheckCanvas, refreshSplitCanvases };
 })();

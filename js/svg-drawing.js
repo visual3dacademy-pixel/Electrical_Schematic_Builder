@@ -335,17 +335,6 @@
     return el;
   }
 
-  function drawVersion() {
-    text(
-      (C.VIEW_W || 1920) - 90,
-      (C.VIEW_H || 1080) - 30,
-      `v${C.VERSION || ""}`,
-      16,
-      900,
-      "#9aa4b2"
-    );
-  }
-
   window.ESB.Drawing = {
     getElements,
     clearGroup,
@@ -362,7 +351,6 @@
     circle,
     path,
     image,
-    text,
-    drawVersion
+    text
   };
 })();

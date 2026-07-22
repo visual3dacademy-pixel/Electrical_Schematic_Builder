@@ -6,7 +6,7 @@
   window.ESB = window.ESB || {};
 
   window.ESB.Config = {
-    VERSION: "0.1",
+    VERSION: "1.7",
     SVG_NS: "http://www.w3.org/2000/svg",
 
     VIEW_W: 1920,

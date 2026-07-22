@@ -32,7 +32,10 @@
   // visible/usable in the CURRENT mode — build/check show everything
   // unfiltered; only IDU/ODU actually scope down to their own circuit.
   function visibleInCurrentMode(canvasId) {
-    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    let mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
+    if (mode === "check" && window.ESB.Mode && window.ESB.Mode.getActiveCanvasMode) {
+      mode = window.ESB.Mode.getActiveCanvasMode();
+    }
     if (mode !== "idu" && mode !== "odu") {
       return true;
     }
@@ -125,7 +128,11 @@
 
   function renderInstances() {
     const layer = document.getElementById("instancesLayer");
+    const meterLeadsLayer = document.getElementById("meterLeadsLayer");
     D.clearGroup(layer);
+    if (meterLeadsLayer) {
+      D.clearGroup(meterLeadsLayer);
+    }
 
     const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
 
@@ -150,13 +157,19 @@
         return;
       }
 
+      // Probe leads render in a dedicated layer above all normal
+      // components. This fixes both the visual stacking problem and the
+      // stuck-drag problem caused by a component's transparent hit box
+      // sitting over the black lead.
+      const renderLayer = type.pivotAtTip && meterLeadsLayer ? meterLeadsLayer : layer;
+
       const glyphGroup = D.group(
         {
           "data-instance-id": instance.id,
           transform: `translate(${instance.x},${instance.y}) rotate(${instance.rotation}) scale(${instance.mirrored ? -1 : 1},1)`,
           style: "cursor:grab;"
         },
-        layer
+        renderLayer
       );
 
       // Invisible full-bounding-box hit target, so clicking/dragging in a
@@ -196,7 +209,7 @@
           700,
           "#1a2230",
           { "pointer-events": "none" },
-          layer
+          renderLayer
         );
       }
     });
@@ -978,18 +991,11 @@
     // Reassign canvasId based on whichever split panel the pointer is
     // actually over right now — not the instance's raw x, since IDU and
     // ODU are two independent 1920-wide panels, not one 1920 space split
-    // in half. A relay's contacts (linked by relayGroup) travel with the
-    // coil so the pair never ends up split across the two circuits.
+    // in half. A relay's coil and contacts (linked by relayGroup for
+    // labeling) are each dragged independently — the group no longer
+    // forces its other members onto the same canvasId.
     if (inSplit && instance && targetCanvasId && instance.canvasId !== targetCanvasId) {
       instance.canvasId = targetCanvasId;
-
-      if (instance.relayGroup) {
-        S.state.instances.forEach((inst) => {
-          if (inst.relayGroup === instance.relayGroup && inst.id !== instance.id) {
-            inst.canvasId = targetCanvasId;
-          }
-        });
-      }
     }
 
     // Split mode is components-only — no wiring capability at all, including

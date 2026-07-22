@@ -1,4 +1,4 @@
-// Version 0.2
+// Version 0.3
 
 (function () {
   "use strict";
@@ -187,8 +187,35 @@
   // convention as an instance's own canvasId. This is what makes IDU and
   // ODU genuinely independent circuits: a wire drawn while in one must
   // never render, or be connectable to, from the other.
-  function createWire(a, b, canvasId) {
-    const wire = { id: generateId("wire"), a, b, canvasId: canvasId || null };
+  function createWire(a, b, canvasId, routeOptions) {
+    // Captured once, right now, from the graph as it exists at this exact
+    // moment — never re-derived later. This is what makes a committed
+    // wire's shape a hard lock: drawing another wire afterward that also
+    // touches the same junction must never retroactively reroute this one.
+    //
+    // routeOptions.fixedPath is used when an existing wire is split by a
+    // perpendicular tee. The two replacement wires inherit the exact
+    // rendered geometry of the original wire instead of being auto-routed
+    // again from their new endpoints.
+    const options = routeOptions || {};
+    const dirFn = window.ESB.WireTool && window.ESB.WireTool.requiredMeetingDirection;
+    const fixedPath = Array.isArray(options.fixedPath)
+      ? options.fixedPath.map((point) => ({ x: point.x, y: point.y }))
+      : null;
+
+    const wire = {
+      id: generateId("wire"),
+      a,
+      b,
+      canvasId: canvasId || null,
+      meetingDirectionA: options.meetingDirectionA !== undefined
+        ? options.meetingDirectionA
+        : (dirFn ? dirFn(a) : null),
+      meetingDirectionB: options.meetingDirectionB !== undefined
+        ? options.meetingDirectionB
+        : (dirFn ? dirFn(b) : null),
+      fixedPath
+    };
     state.wires.push(wire);
     return wire;
   }

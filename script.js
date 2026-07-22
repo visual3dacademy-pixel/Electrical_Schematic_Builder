@@ -1,4 +1,4 @@
-// Version 0.5
+// Version 0.8
 
 (function () {
   "use strict";
@@ -32,9 +32,33 @@
     window.ESB.Sections.renderAll(staticLayer);
   }
 
+  // A plain HTML label in #overlays (position:fixed relative to #stage,
+  // z-index above the schematic) rather than an SVG element drawn into
+  // circuitSvg — the previous approach lived in the SVG's own coordinate
+  // space, which grows taller as sections are added and scrolls out of
+  // view, plus it was added before the background layer and got painted
+  // over immediately. This one is always visible, regardless of circuit
+  // size, scroll position, or mode — a quick, unambiguous way to confirm
+  // which build is actually loaded (helps rule out a stale browser cache).
+  function renderVersionLabel() {
+    const overlays = Drawing.getElements().overlays;
+    if (!overlays || document.getElementById("versionLabel")) {
+      return;
+    }
+
+    const label = document.createElement("div");
+    label.id = "versionLabel";
+    label.style.cssText =
+      "position:absolute;right:10px;bottom:6px;z-index:30;" +
+      "font:700 13px Arial, Helvetica, sans-serif;color:#9aa4b2;" +
+      "pointer-events:none;user-select:none;";
+    label.textContent = `v${C.VERSION || ""}`;
+    overlays.appendChild(label);
+  }
+
   function render() {
     Drawing.drawDefs();
-    Drawing.drawVersion();
+    renderVersionLabel();
 
     const svg = Drawing.getElements().svg;
     const paletteSvg = document.getElementById("paletteSvg");
@@ -52,6 +76,10 @@
     ensureLayer("wirePreviewLayer", svg);
     ensureLayer("dragPreviewLayer", svg);
     ensureLayer("breakerControlLayer", svg);
+    // Dedicated topmost layer for meter probes. Keeping probe artwork and
+    // hit targets outside instancesLayer prevents later-added components
+    // from painting over a lead or intercepting its pointer events.
+    ensureLayer("meterLeadsLayer", svg);
     ensureLayer("paletteLayer", paletteSvg);
 
     relayout();
@@ -65,6 +93,8 @@
     window.ESB.LabelEditor.init();
     window.ESB.BreakerControl.render();
     window.ESB.Mode.init();
+    window.ESB.Menu.init();
+    window.ESB.VoltageMeter.init();
   }
 
   window.ESB.relayout = relayout;

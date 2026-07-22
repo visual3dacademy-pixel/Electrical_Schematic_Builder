@@ -1,4 +1,4 @@
-<!-- Version 0.1 -->
+<!-- Version 1.4 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -6,12 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Electrical Schematic Builder</title>
 
-  <link rel="stylesheet" href="styles.css?v=0.6" />
-  <link rel="preload" as="image" href="SVG/V3D%20academy_home_screen.svg?v=1" />
+  <link rel="stylesheet" href="styles.css?v=1.1" />
+  <link rel="preload" as="image" href="SVG/V3D%20academy_home_screen.svg?v=2" />
 </head>
 
 <body>
   <script src="js/loading-screen.js?v=1"></script>
+  <script src="js/disclaimer-modal.js?v=1"></script>
+  <script src="js/menu.js?v=1.2"></script>
 
   <main id="app">
     <section id="stage" aria-label="Schematic builder stage">
@@ -46,13 +48,26 @@
 
         <img
           id="loading-screen-image"
-          src="SVG/V3D%20academy_home_screen.svg?v=1"
+          src="SVG/V3D%20academy_home_screen.svg?v=2"
           alt="Visual 3D Academy — Electrical Circuit Builder"
         />
 
         <svg id="loading-text-overlay" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
           <text x="960" y="990" text-anchor="middle" class="loading-text-svg">Loading Electrical Circuit Builder</text>
         </svg>
+      </div>
+
+      <!--
+        Sits directly behind #loading-screen (same full-bleed layering
+        idea, one z-index step lower) so it's already fully in place the
+        instant the title card's own 5-second timer fades it away — no
+        need to coordinate the two files' timing at all.
+      -->
+      <div id="disclaimer-modal">
+        <div id="disclaimer-box">
+          <p>The Schematic Builder is under development. This has multiple bugs that we are working through.</p>
+          <button id="disclaimer-ack-btn" type="button">I Understand</button>
+        </div>
       </div>
 
       <div id="scrollArea">
@@ -73,10 +88,10 @@
     </section>
   </main>
 
-  <script src="js/config.js?v=0.4"></script>
+  <script src="js/config.js?v=0.8"></script>
   <script src="js/geometry.js?v=0.4"></script>
-  <script src="js/state.js?v=0.9"></script>
-  <script src="js/svg-drawing.js?v=0.3"></script>
+  <script src="js/state.js?v=1.1"></script>
+  <script src="js/svg-drawing.js?v=0.4"></script>
   <script src="js/sections.js?v=0.8"></script>
 
   <script src="symbols/symbol-library.js?v=0.2"></script>
@@ -88,14 +103,17 @@
   <script src="symbols/symbols-meter.js?v=0.3"></script>
 
   <script src="engine/netlist.js?v=0.2"></script>
+  <script src="engine/voltage-device-model.js?v=0.1"></script>
+  <script src="engine/voltage-solver.js?v=0.1"></script>
 
-  <script src="ui/palette.js?v=0.7"></script>
-  <script src="ui/canvas-interactions.js?v=3.1"></script>
-  <script src="ui/wire-tool.js?v=1.8"></script>
+  <script src="ui/palette.js?v=0.9"></script>
+  <script src="ui/canvas-interactions.js?v=3.4"></script>
+  <script src="ui/wire-tool.js?v=2.8"></script>
   <script src="ui/label-editor.js?v=0.1"></script>
   <script src="ui/breaker-control.js?v=0.1"></script>
-  <script src="ui/mode.js?v=1.6"></script>
+  <script src="ui/mode.js?v=1.9"></script>
+  <script src="ui/voltage-meter.js?v=0.3"></script>
 
-  <script src="script.js?v=0.7"></script>
+  <script src="script.js?v=1.1"></script>
 </body>
 </html>
