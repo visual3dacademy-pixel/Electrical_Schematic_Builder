@@ -1,4 +1,4 @@
-// Version 0.1
+// Version 0.3
 //
 // Viewport zoom control for the IDU/ODU single-canvas screens.
 // 0   = the existing full-size, vertically scrollable schematic.
@@ -43,8 +43,8 @@
     return window.ESB.Mode.getActiveCanvasMode() || "idu";
   }
 
-  function hasTransformer() {
-    return S.state.instances.some((instance) => instance.typeId === "transformer");
+  function hasTransformer(canvasId) {
+    return S.state.instances.some((instance) => instance.typeId === "transformer" && instance.canvasId === canvasId);
   }
 
   function isSupportedMode() {
@@ -52,25 +52,28 @@
     return mode === "idu" || mode === "odu" || mode === "check";
   }
 
-  function getFullViewBox() {
-    const totalHeight = window.ESB.Sections.getTotalHeight();
+  function getFullViewBox(canvasId) {
+    const totalHeight = window.ESB.Sections.getTotalHeight(canvasId);
     return { x: 0, y: 0, width: C.VIEW_W, height: totalHeight };
   }
 
-  function getFitViewBox() {
-    const main = window.ESB.Sections.getById("main");
-    const low = window.ESB.Sections.getById("lowVoltage");
+  function getFitViewBox(canvasId) {
+    const main = window.ESB.Sections.getById("main", canvasId);
+    const low = window.ESB.Sections.getById("lowVoltage", canvasId);
 
     if (!main || !low) {
-      return getFullViewBox();
+      return getFullViewBox(canvasId);
     }
 
     // Keep a small amount of breathing room above the upper verticals and
     // below the lower verticals while making those two rail limits the
     // defining top and bottom of Zoom 100.
-    const paddingY = 36;
-    const top = Math.max(0, main.topY - paddingY);
-    const bottom = low.bottomY + paddingY;
+    // Keep the SVG viewBox anchored at y=0 so the reserved schematic
+    // header band remains visible at every zoom level. The circuit rails
+    // begin at y=140, so this does not cover the ladder content.
+    const bottomPadding = 36;
+    const top = 0;
+    const bottom = low.bottomY + bottomPadding;
 
     return {
       x: 0,
@@ -90,7 +93,7 @@
   }
 
   function setSvgNaturalState(svg) {
-    const full = getFullViewBox();
+    const full = getFullViewBox(getCanvasMode());
     svg.setAttribute("viewBox", `${full.x} ${full.y} ${full.width} ${full.height}`);
     svg.style.width = "100%";
     svg.style.height = "auto";
@@ -102,7 +105,7 @@
     if (!svg || !scrollArea) return;
 
     const canvasMode = getCanvasMode();
-    const available = hasTransformer() && !!window.ESB.Sections.getById("lowVoltage");
+    const available = hasTransformer(canvasMode) && !!window.ESB.Sections.getById("lowVoltage", canvasMode);
     let value = clamp(Number(zoomByCanvas[canvasMode]) || 0, 0, 100);
 
     if (!available || !isSupportedMode()) {
@@ -115,8 +118,8 @@
     }
 
     const t = value / 100;
-    const full = getFullViewBox();
-    const fit = getFitViewBox();
+    const full = getFullViewBox(canvasMode);
+    const fit = getFitViewBox(canvasMode);
     const box = interpolateBox(full, fit, t);
 
     svg.setAttribute("viewBox", `${box.x} ${box.y} ${box.width} ${box.height}`);
@@ -140,7 +143,7 @@
 
     const mode = getMode();
     const canvasMode = getCanvasMode();
-    const available = hasTransformer() && !!window.ESB.Sections.getById("lowVoltage");
+    const available = hasTransformer(canvasMode) && !!window.ESB.Sections.getById("lowVoltage", canvasMode);
     const visible = mode === "idu" || mode === "odu" || mode === "check";
 
     root.style.display = visible ? "flex" : "none";

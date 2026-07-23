@@ -1,4 +1,4 @@
-// Version 0.7
+// Version 0.8
 //
 // Click-drag wire drawing between terminals/junctions, with snapping and
 // orthogonal routing, plus rendering and selection of committed wires.
@@ -29,6 +29,20 @@
   // Screen (components/movement only, per spec) turn it off.
   function wiringAllowedInMode(mode) {
     return mode === "build" || mode === "idu" || mode === "odu";
+  }
+
+  function isCheckMode() {
+    return !!(window.ESB.Mode && window.ESB.Mode.getMode() === "check");
+  }
+
+  function cancelWireInteraction() {
+    dragMode = null;
+    dragData = null;
+    clearPreview();
+    document.body.classList.remove("esb-wire-dragging");
+    document.documentElement.classList.remove("esb-wire-dragging");
+    document.body.style.cursor = "";
+    document.documentElement.style.cursor = "";
   }
 
   // The canvasId a NEW wire/junction should be tagged with, given the
@@ -509,7 +523,7 @@
     const points = [];
 
     S.state.instances.forEach((instance) => {
-      if (instance.id === excludeInstanceId) {
+      if (instance.id === excludeInstanceId || instance.placementPending) {
         return;
       }
       // IDU/ODU are independent circuits — a wire being drawn in one must
@@ -520,6 +534,16 @@
       }
 
       const type = Lib.getType(instance.typeId);
+
+      // Meter probes are measuring instruments, never circuit nodes. They
+      // remain in application state while Build Circuit is active so their
+      // positions persist between checks, but a newly drawn wire must never
+      // snap to a hidden probe terminal. That stale connection caused a wire
+      // to follow the probe when Check Circuit was entered again.
+      if (!type || type.pivotAtTip || instance.typeId.indexOf("meter_lead_") === 0) {
+        return;
+      }
+
       type.terminals.forEach((terminal) => {
         points.push({
           ref: { kind: "terminal", instanceId: instance.id, terminalId: terminal.id },
@@ -987,7 +1011,13 @@
       // visual convention only and does not alter hit-testing or connectivity.
       D.polyline(
         record.path,
-        { "data-wire-id": wire.id, stroke: "transparent", "stroke-width": 22, style: "cursor:pointer;" },
+        {
+          "data-wire-id": wire.id,
+          stroke: "transparent",
+          "stroke-width": 22,
+          "pointer-events": isCheckMode() ? "none" : "stroke",
+          style: isCheckMode() ? "pointer-events:none;" : "cursor:pointer;"
+        },
         layer
       );
 
@@ -1049,6 +1079,24 @@
     });
   }
 
+  function refTouchesMeterLead(ref) {
+    if (!ref || ref.kind !== "terminal") return false;
+    const instance = S.getInstance(ref.instanceId);
+    return !!(instance && instance.typeId.indexOf("meter_lead_") === 0);
+  }
+
+  // Migration guard for files created before v4.1. Meter leads are probes,
+  // not schematic terminals, so any stored wire endpoint that references a
+  // lead is invalid and must be removed before rendering or solving.
+  function purgeProbeAttachedWires() {
+    const invalidIds = S.state.wires
+      .filter((wire) => refTouchesMeterLead(wire.a) || refTouchesMeterLead(wire.b))
+      .map((wire) => wire.id);
+
+    invalidIds.forEach((wireId) => S.removeWire(wireId));
+    return invalidIds.length;
+  }
+
   function renderWires() {
     const layer = document.getElementById("wireLayer");
     D.clearGroup(layer);
@@ -1069,6 +1117,8 @@
   // above instancesLayer — a button drawn into wireLayer itself would sit
   // *behind* instances and could have its clicks stolen by them).
   function renderWireToolbar(layer, wire) {
+    if (isCheckMode()) return;
+
     const pointA = G.resolveRefPoint(wire.a);
     const pointB = G.resolveRefPoint(wire.b);
 
@@ -1145,10 +1195,18 @@
     // mid-drag (grab over a component body, default over blank canvas) —
     // forcing it here keeps the crosshair for the whole gesture, so it
     // reads as "drawing a wire" the entire time, not just at the start.
+    document.body.classList.add("esb-wire-dragging");
+    document.documentElement.classList.add("esb-wire-dragging");
     document.body.style.cursor = "crosshair";
+    document.documentElement.style.cursor = "crosshair";
   }
 
   function onPointerMove(event) {
+    if (isCheckMode()) {
+      if (dragMode) cancelWireInteraction();
+      return;
+    }
+
     if (dragMode === "move-wire") {
       const svg = D.getElements().svg;
       const point = G.clientToStage(svg, event.clientX, event.clientY);
@@ -1617,6 +1675,11 @@
   }
 
   function onPointerUp(event) {
+    if (isCheckMode()) {
+      cancelWireInteraction();
+      return;
+    }
+
     if (dragMode === "move-wire") {
       dragMode = null;
       dragData = null;
@@ -1739,7 +1802,10 @@
     clearPreview();
     dragMode = null;
     dragData = null;
+    document.body.classList.remove("esb-wire-dragging");
+    document.documentElement.classList.remove("esb-wire-dragging");
     document.body.style.cursor = "";
+    document.documentElement.style.cursor = "";
 
     renderWires();
     window.ESB.CanvasInteractions.renderSelection();
@@ -1747,7 +1813,7 @@
 
   function onPointerDownSelect(event) {
     const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "build";
-    if (!wiringAllowedInMode(mode)) {
+    if (mode === "check" || !wiringAllowedInMode(mode)) {
       return;
     }
 
@@ -1806,6 +1872,7 @@
     // Exposed so state.js's createWire can capture a wire's meeting
     // direction(s) once, at creation time, and freeze them onto the wire —
     // see the comment on wirePath above for why that capture matters.
-    requiredMeetingDirection
+    requiredMeetingDirection,
+    purgeProbeAttachedWires
   };
 })();

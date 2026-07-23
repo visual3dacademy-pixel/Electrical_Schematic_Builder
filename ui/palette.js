@@ -1,4 +1,4 @@
-// Version 0.5
+// Version 0.7
 //
 // Static palette panel occupying the left Config.PALETTE_W strip of the
 // stage. Text-only rows (no glyph preview) — canvas-interactions.js reads
@@ -42,14 +42,20 @@
   // Greyed out for the whole time split mode is active (not just once one
   // exists) so that first drop is blocked rather than silently broken.
   // Place them in Build/IDU/ODU mode instead, then switch to Split.
-  const SPLIT_DISABLED_TYPE_IDS = ["thermostat_block", "transformer"];
+  const SPLIT_DISABLED_TYPE_IDS = ["transformer", "thermostat_block"];
 
   function isSingleUseAndPlaced(typeId) {
     if (!SINGLE_USE_TYPE_IDS.includes(typeId)) {
       return false;
     }
 
-    return window.ESB.State.state.instances.some((instance) => instance.typeId === typeId);
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "idu";
+    const canvasId = mode === "idu" || mode === "odu"
+      ? mode
+      : (window.ESB.Mode ? window.ESB.Mode.getActiveCanvasMode() : "idu");
+    return window.ESB.State.state.instances.some(
+      (instance) => instance.typeId === typeId && instance.canvasId === canvasId
+    );
   }
 
   function isDisabledInSplitMode(typeId) {

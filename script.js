@@ -1,4 +1,4 @@
-// Version 0.9
+// Version 2.0
 
 (function () {
   "use strict";
@@ -22,7 +22,8 @@
   // placement) so the taller canvas and its rails stay in sync.
   function relayout() {
     const svg = Drawing.getElements().svg;
-    const totalHeight = window.ESB.Sections.getTotalHeight();
+    const canvasId = window.ESB.Mode ? window.ESB.Mode.getActiveCanvasMode() : "idu";
+    const totalHeight = window.ESB.Sections.getTotalHeight(canvasId);
 
     svg.setAttribute("viewBox", `0 0 ${C.VIEW_W} ${totalHeight}`);
 
@@ -36,7 +37,7 @@
     const staticLayer = document.getElementById("staticLayer");
     Drawing.clearGroup(staticLayer);
     Drawing.drawBackground(totalHeight, staticLayer);
-    window.ESB.Sections.renderAll(staticLayer);
+    window.ESB.Sections.renderAll(staticLayer, canvasId);
   }
 
   // A plain HTML label in #overlays (position:fixed relative to #stage,
@@ -101,8 +102,11 @@
     window.ESB.BreakerControl.render();
     window.ESB.Mode.init();
     window.ESB.CircuitZoom.init();
+    window.ESB.CanvasControls.init();
+    window.ESB.History.seed();
     window.ESB.Menu.init();
     window.ESB.VoltageMeter.init();
+    window.ESB.ThermostatButtons.init();
   }
 
   window.ESB.relayout = relayout;

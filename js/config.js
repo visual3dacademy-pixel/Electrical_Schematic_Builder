@@ -1,4 +1,4 @@
-// Version 1.0
+// Version 2.0
 
 (function () {
   "use strict";
@@ -6,7 +6,7 @@
   window.ESB = window.ESB || {};
 
   window.ESB.Config = {
-    VERSION: "2.7",
+    VERSION: "4.2",
     SVG_NS: "http://www.w3.org/2000/svg",
 
     VIEW_W: 1920,

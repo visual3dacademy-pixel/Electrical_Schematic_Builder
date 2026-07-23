@@ -1,4 +1,4 @@
-// Version 0.3
+// Version 0.4
 
 (function () {
   "use strict";
@@ -73,7 +73,9 @@
       // Canvas ID: "idu" or "odu" for dual-canvas modes, null for single-canvas
       canvasId: opts.canvasId || null,
       // Relay group: for tracking coils and their associated contacts
-      relayGroup: opts.relayGroup || null
+      relayGroup: opts.relayGroup || null,
+      // Newly palette-placed components are intentionally inert until moved.
+      placementPending: !!opts.placementPending
     };
 
     state.instances.push(instance);
@@ -289,6 +291,31 @@
     return state.selectedWireId ? getWire(state.selectedWireId) : null;
   }
 
+
+  function clone(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function exportCanvas(canvasId) {
+    return {
+      instances: clone(state.instances.filter((item) => item.canvasId === canvasId && !item.locked)),
+      wires: clone(state.wires.filter((item) => item.canvasId === canvasId)),
+      junctions: clone(state.junctions.filter((item) => item.canvasId === canvasId))
+    };
+  }
+
+  function importCanvas(canvasId, snapshot) {
+    const data = snapshot || { instances: [], wires: [], junctions: [], designatorCounters: {} };
+    state.instances = state.instances.filter((item) => item.canvasId !== canvasId || item.locked)
+      .concat(clone(data.instances || []));
+    state.wires = state.wires.filter((item) => item.canvasId !== canvasId)
+      .concat(clone(data.wires || []));
+    state.junctions = state.junctions.filter((item) => item.canvasId !== canvasId)
+      .concat(clone(data.junctions || []));
+    state.selectedId = null;
+    state.selectedWireId = null;
+  }
+
   window.ESB.State = {
     state,
     generateId,
@@ -309,6 +336,8 @@
     setWireBendY,
     selectWire,
     getSelectedWire,
-    sameRef
+    sameRef,
+    exportCanvas,
+    importCanvas
   };
 })();

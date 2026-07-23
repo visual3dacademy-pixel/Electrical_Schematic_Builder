@@ -1,4 +1,4 @@
-// Version 0.3
+// Version 1.0
 //
 // Four thermoswitch symbols normalized from the user's 2 mm-grid SVG
 // source drawings. The source millimeter grid is used only as a geometry
@@ -31,12 +31,20 @@
     D.line(sx(x1), sy(y1, terminalY), sx(x2), sy(y2, terminalY), STROKE, parent);
   }
 
-  function drawBulb(parent, terminalY, points) {
-    D.polyline(
-      points.map((point) => ({ x: sx(point[0]), y: sy(point[1], terminalY) })),
-      STROKE,
-      parent
-    );
+  function drawBulb(parent, terminalY, points, leverStart, leverEnd) {
+    const mapped = points.map((point) => ({ x: sx(point[0]), y: sy(point[1], terminalY) }));
+
+    // The upper end of the offset actuator leg must touch the lever exactly.
+    // Source-file rounding previously left a small visible gap or overlap.
+    // Resolve the lever's y-coordinate at the leg's actual x-position, then
+    // use that exact intersection as the first point of the actuator shape.
+    if (mapped.length && leverStart && leverEnd && leverEnd.x !== leverStart.x) {
+      const legX = mapped[0].x;
+      const ratio = (legX - leverStart.x) / (leverEnd.x - leverStart.x);
+      mapped[0].y = leverStart.y + ratio * (leverEnd.y - leverStart.y);
+    }
+
+    D.polyline(mapped, STROKE, parent);
   }
 
   function registerThermoswitch(definition) {
@@ -64,23 +72,47 @@
         { id: "t2", x: TERMINAL_HALF_SPAN, y: 0 }
       ],
       labelAnchor: { x: 0, y: -34 },
-      draw(parent) {
-        if (definition.closedContactPoint) {
+      draw(parent, instance) {
+        let leverStart;
+        let leverEnd;
+        const explicitClosed = instance && instance.params && typeof instance.params.closed === "boolean";
+        const normalClosed = definition.defaultVariant === "NC";
+        const isClosed = explicitClosed ? instance.params.closed : normalClosed;
+
+        if (isClosed) {
+          leverStart = { x: -TERMINAL_HALF_SPAN, y: 0 };
+          // Touch the near edge of the right terminal circle.
+          leverEnd = { x: TERMINAL_HALF_SPAN - 5.5, y: 0 };
+          D.line(leverStart.x, leverStart.y, leverEnd.x, leverEnd.y, STROKE, parent);
+        } else if (definition.closedContactPoint) {
           // NC thermoswitches are visibly closed in their normal state.
           // The lever starts at the exact center of t1 (future animation
           // pivot) and ends on the top/bottom edge of the t2 terminal dot.
-          D.line(
-            -TERMINAL_HALF_SPAN,
-            0,
-            definition.closedContactPoint.x,
-            definition.closedContactPoint.y,
-            STROKE,
-            parent
-          );
+          leverStart = { x: -TERMINAL_HALF_SPAN, y: 0 };
+          leverEnd = {
+            x: definition.closedContactPoint.x,
+            y: definition.closedContactPoint.y
+          };
+          D.line(leverStart.x, leverStart.y, leverEnd.x, leverEnd.y, STROKE, parent);
         } else {
-          drawLine(parent, definition.terminalY, ...definition.contactLine);
+          leverStart = {
+            x: sx(definition.contactLine[0]),
+            y: sy(definition.contactLine[1], definition.terminalY)
+          };
+          leverEnd = {
+            x: sx(definition.contactLine[2]),
+            y: sy(definition.contactLine[3], definition.terminalY)
+          };
+          D.line(leverStart.x, leverStart.y, leverEnd.x, leverEnd.y, STROKE, parent);
         }
-        drawBulb(parent, definition.terminalY, definition.bulbPoints);
+
+        drawBulb(
+          parent,
+          definition.terminalY,
+          definition.bulbPoints,
+          leverStart,
+          leverEnd
+        );
       }
     });
   }

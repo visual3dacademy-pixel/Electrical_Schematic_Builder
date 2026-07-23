@@ -1,17 +1,10 @@
-// Version 0.1
+// Version 0.3
+// Canvas-scoped breaker control and dynamic schematic header.
 //
-// Open/Closed toggle for the built-in L1/L2 circuit breakers (see
-// canvas-interactions.js's createBuiltInBreakers). A real 2-pole breaker
-// trips both legs together, so one button drives both instances' shared
-// open/closed state — there's no reason to model them independently.
-//
-// Toggling updates the two breaker arc elements' style directly (see
-// symbols-power.js's data-breaker-arc groups) instead of going through a
-// full renderInstances() — a full re-render would replace those elements
-// outright, and a CSS transition can't animate an element that didn't
-// exist a moment ago. The underlying data (instance.params.open) is still
-// updated first, so any *other*, unrelated re-render later on renders the
-// correct (already-toggled) position, just without its own animation.
+// The header is drawn inside the SVG's reserved top band (y = 0..110),
+// while the circuit rails begin at y = 140. Because the zoom viewBox is
+// always anchored at y = 0, the header remains visible at every zoom level
+// without floating over the ladder or drifting away from the rail geometry.
 
 (function () {
   "use strict";
@@ -22,82 +15,165 @@
   const D = window.ESB.Drawing;
   const S = window.ESB.State;
 
-  const BUTTON_W = 110;
-  const BUTTON_H = 40;
-  const BUTTON_Y = 55;
+  const HEADER = {
+    buttonWidth: 180,
+    buttonHeight: 58,
+    buttonY: 20,
+    titleY: 45,
+    subtitleY: 82
+  };
 
-  function breakers() {
-    return S.state.instances.filter((instance) => instance.typeId === "breaker");
+  function activeCanvasId() {
+    if (!window.ESB.Mode) return "idu";
+    const mode = window.ESB.Mode.getMode();
+    if (mode === "idu" || mode === "odu") return mode;
+    return window.ESB.Mode.getActiveCanvasMode() || "idu";
   }
 
-  function isOpen() {
-    const first = breakers()[0];
+  function breakers(canvasId) {
+    return S.state.instances.filter(
+      (instance) => instance.typeId === "breaker" && instance.canvasId === canvasId
+    );
+  }
+
+  function isOpen(canvasId) {
+    const first = breakers(canvasId)[0];
     return !!(first && first.params && first.params.open);
   }
 
-  function render() {
-    const layer = document.getElementById("breakerControlLayer");
-    if (!layer) {
-      return;
+  function updateBreakerArcs(canvasId, open) {
+    breakers(canvasId).forEach((instance) => {
+      instance.params = instance.params || {};
+      instance.params.open = open;
+
+      document
+        .querySelectorAll(`[data-breaker-arc="${instance.id}"]`)
+        .forEach((arcGroup) => {
+          arcGroup.style.transform = `translate(0px,${open ? "-10px" : "0px"})`;
+        });
+    });
+  }
+
+  function toggle(canvasId) {
+    const id = canvasId || activeCanvasId();
+    updateBreakerArcs(id, !isOpen(id));
+    render();
+
+    if (window.ESB.Mode && window.ESB.Mode.getMode() === "split") {
+      window.ESB.Mode.refreshSplitCanvases();
     }
+  }
 
-    D.clearGroup(layer);
+  function drawHeader(parent, canvasId, options) {
+    if (!parent) return;
 
-    const main = window.ESB.Sections.getById("main");
-    if (!main) {
-      return;
-    }
+    const opts = options || {};
+    const main = window.ESB.Sections.getById("main", canvasId);
+    if (!main) return;
 
-    const open = isOpen();
-    const centerX = main.leftX;
+    D.clearGroup(parent);
 
-    const btn = D.group(
-      { "data-breaker-toggle": "true", style: "cursor:pointer;" },
-      layer
+    const centerX = (main.leftX + main.rightX) / 2;
+    const open = isOpen(canvasId);
+    const unitTitle = canvasId === "odu" ? "Outdoor Unit" : "Indoor Unit";
+
+    // The group is entirely contained in the reserved top band. Nothing
+    // extends below y=100, leaving clear separation before rails at y=140.
+    const headerGroup = D.group(
+      {
+        "data-circuit-header": canvasId,
+        style: "user-select:none;"
+      },
+      parent
+    );
+
+    const buttonX = main.leftX - HEADER.buttonWidth / 2;
+    const button = D.group(
+      {
+        role: "button",
+        tabindex: "0",
+        "aria-label": `${unitTitle} circuit breaker ${open ? "open" : "closed"}. Activate to toggle.`,
+        style: "cursor:pointer;"
+      },
+      headerGroup
     );
 
     D.rect(
-      centerX - BUTTON_W / 2,
-      BUTTON_Y - BUTTON_H / 2,
-      BUTTON_W,
-      BUTTON_H,
+      buttonX,
+      HEADER.buttonY,
+      HEADER.buttonWidth,
+      HEADER.buttonHeight,
       {
-        rx: 8,
+        rx: 12,
+        ry: 12,
         fill: open ? "#c0392b" : "#2f9e44",
-        stroke: "none"
+        stroke: "none",
+        style: "filter:drop-shadow(0 3px 5px rgba(0,0,0,.20));"
       },
-      btn
+      button
     );
 
     D.text(
-      centerX,
-      BUTTON_Y,
+      main.leftX,
+      HEADER.buttonY + HEADER.buttonHeight / 2 + 1,
       open ? "OPEN" : "CLOSED",
-      15,
-      800,
+      23,
+      900,
       "#ffffff",
       { "pointer-events": "none" },
-      btn
+      button
     );
-  }
 
-  // Flips the shared state and animates both breakers' arcs to match,
-  // without disturbing anything else on the canvas.
-  function toggle() {
-    const nextOpen = !isOpen();
+    const activate = (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggle(canvasId);
+    };
 
-    breakers().forEach((instance) => {
-      instance.params = instance.params || {};
-      instance.params.open = nextOpen;
-
-      const arcGroup = document.querySelector(`[data-breaker-arc="${instance.id}"]`);
-      if (arcGroup) {
-        arcGroup.style.transform = `translate(0px,${nextOpen ? "-10px" : "0px"})`;
-      }
+    button.addEventListener("pointerdown", (event) => event.stopPropagation());
+    button.addEventListener("click", activate);
+    button.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") activate(event);
     });
 
-    render();
+    D.text(centerX, HEADER.titleY, unitTitle, 34, 900, "#111111", {
+      "pointer-events": "none"
+    }, headerGroup);
+
+    D.text(centerX, HEADER.subtitleY, "Earth Ground", 21, 800, "#2a3340", {
+      "pointer-events": "none"
+    }, headerGroup);
+
+    // In split mode the panel already has an external title bar. The SVG
+    // header is still used for the breaker and ground relationship, but a
+    // caller may hide the duplicate unit title if desired.
+    if (opts.hideTitle) {
+      const titleNode = headerGroup.querySelector("text:nth-of-type(2)");
+      if (titleNode) titleNode.setAttribute("visibility", "hidden");
+    }
   }
 
-  window.ESB.BreakerControl = { render, toggle };
+  function render() {
+    // Remove the old fixed HTML overlay from v2.8 if it is still present.
+    const oldOverlay = document.getElementById("fixedCircuitHeader");
+    if (oldOverlay) oldOverlay.remove();
+
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "idu";
+    const layer = document.getElementById("breakerControlLayer");
+
+    if (layer) {
+      if (mode === "idu" || mode === "odu" || mode === "check") {
+        drawHeader(layer, activeCanvasId());
+      } else {
+        D.clearGroup(layer);
+      }
+    }
+  }
+
+  window.ESB.BreakerControl = {
+    render,
+    toggle,
+    drawHeader,
+    isOpen
+  };
 })();

@@ -1,4 +1,4 @@
-// Version 0.4
+// Version 4.3
 //
 // Placement/selection/move/delete interactions for instances on the
 // canvas, plus palette-to-canvas drag-and-drop. Wire drawing (Phase 3)
@@ -18,6 +18,12 @@
   const CANVAS_MARGIN = 20;
   const MIN_X = C.PALETTE_W + CANVAS_MARGIN;
   const RELAY_ROW_OFFSET = 140;
+
+  // Actual visible symbol bounds captured after each symbol is drawn.
+  // Symbol definitions are not always centered on their instance origin
+  // (Ground is the clearest example), so selection/placement feedback must
+  // follow the rendered artwork rather than generic type.width/type.height.
+  const visualBoundsByInstanceId = new Map();
 
   // The canvasId a NEW wire/junction should be tagged with, given the
   // current mode — mirrors wire-tool.js's own currentCanvasId (duplicated
@@ -126,6 +132,15 @@
     };
   }
 
+  function setInteractionCursor(cursor) {
+    document.body.style.cursor = cursor || "";
+    document.documentElement.style.cursor = cursor || "";
+  }
+
+  function clearInteractionCursor() {
+    setInteractionCursor("");
+  }
+
   function renderInstances() {
     const layer = document.getElementById("instancesLayer");
     const meterLeadsLayer = document.getElementById("meterLeadsLayer");
@@ -191,7 +206,30 @@
         );
       }
 
-      Lib.drawInstance(glyphGroup, type, instance);
+      const artworkGroup = D.group(
+        { "data-instance-artwork-id": instance.id },
+        glyphGroup
+      );
+      Lib.drawInstance(artworkGroup, type, instance);
+
+      // getBBox() is available immediately after SVG artwork is appended.
+      // Store only the visible symbol artwork bounds; the transparent hit box
+      // is deliberately excluded so asymmetric symbols remain centered in
+      // the placement circle.
+      try {
+        const box = artworkGroup.getBBox();
+        if (Number.isFinite(box.x) && Number.isFinite(box.y) && box.width >= 0 && box.height >= 0) {
+          visualBoundsByInstanceId.set(instance.id, {
+            x: box.x,
+            y: box.y,
+            width: box.width,
+            height: box.height
+          });
+        }
+      } catch (error) {
+        // A temporarily hidden SVG can reject getBBox(). The selection code
+        // has a safe fallback to the symbol type dimensions.
+      }
 
       if (type.labelAnchor) {
         const labelWorld = G.localToWorld(type.labelAnchor, instance);
@@ -237,24 +275,50 @@
     }
 
     const type = Lib.getType(instance.typeId);
-    const radius = Math.max(type.width, type.height) / 2 + 14;
+    const localBounds = visualBoundsByInstanceId.get(instance.id) || {
+      x: -type.width / 2,
+      y: -type.height / 2,
+      width: type.width,
+      height: type.height
+    };
+
+    // Transform all four visible-artwork corners into stage coordinates.
+    // This keeps the placement circle centered correctly for asymmetric,
+    // mirrored, and rotated symbols.
+    const localCorners = [
+      { x: localBounds.x, y: localBounds.y },
+      { x: localBounds.x + localBounds.width, y: localBounds.y },
+      { x: localBounds.x + localBounds.width, y: localBounds.y + localBounds.height },
+      { x: localBounds.x, y: localBounds.y + localBounds.height }
+    ];
+    const worldCorners = localCorners.map((point) => G.localToWorld(point, instance));
+    const minX = Math.min(...worldCorners.map((point) => point.x));
+    const maxX = Math.max(...worldCorners.map((point) => point.x));
+    const minY = Math.min(...worldCorners.map((point) => point.y));
+    const maxY = Math.max(...worldCorners.map((point) => point.y));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const radius = Math.max(maxX - minX, maxY - minY) / 2 + 18;
 
     D.circle(
-      instance.x,
-      instance.y,
+      centerX,
+      centerY,
       radius,
       {
-        fill: "none",
-        stroke: "#2377e8",
+        fill: instance.placementPending ? "rgba(104, 189, 234, 0.16)" : "none",
+        stroke: instance.placementPending ? "#68bdea" : "#2377e8",
         "stroke-width": 3,
-        "stroke-dasharray": "8 6"
+        "stroke-dasharray": "8 6",
+        "pointer-events": "none"
       },
       layer
     );
 
-    const toolbarY = instance.y - radius - 34;
+    // Only the delete control remains. Newly placed components stay shaded
+    // and electrically inert until the user moves them once.
+    const toolbarY = centerY - radius - 34;
 
-    drawToolbarButton(layer, instance.x, toolbarY, "delete", (btn) => {
+    drawToolbarButton(layer, centerX, toolbarY, "delete", (btn) => {
       D.line(-7, -7, 7, 7, { stroke: "#c0392b", width: 2.5 }, btn);
       D.line(-7, 7, 7, -7, { stroke: "#c0392b", width: 2.5 }, btn);
     });
@@ -285,8 +349,8 @@
   // Identified by Y position (>= the section's own topY) rather than by
   // canvasId or wire-tracing, since components placed there aren't
   // otherwise marked as "belonging" to the section in any other way.
-  function cascadeDeleteLowVoltageSection() {
-    const lowSection = window.ESB.Sections.getById("lowVoltage");
+  function cascadeDeleteLowVoltageSection(canvasId) {
+    const lowSection = window.ESB.Sections.getById("lowVoltage", canvasId);
     if (!lowSection) {
       return;
     }
@@ -294,10 +358,10 @@
     const cutoffY = lowSection.topY - 1;
 
     S.state.instances
-      .filter((instance) => instance.y >= cutoffY)
+      .filter((instance) => instance.canvasId === canvasId && instance.y >= cutoffY)
       .forEach((instance) => S.removeInstance(instance.id));
 
-    window.ESB.Sections.removeLowVoltageSection();
+    window.ESB.Sections.removeLowVoltageSection(canvasId);
   }
 
   // Modal warning before an irreversible cascade (deleting a transformer
@@ -359,10 +423,10 @@
     const isTransformer = !!(instance && instance.typeId === "transformer");
 
     S.removeInstance(id);
-    const railRestored = window.ESB.Sections.releaseTstat(id);
+    const railRestored = window.ESB.Sections.releaseTstat(id, instance && instance.canvasId);
 
     if (isTransformer) {
-      cascadeDeleteLowVoltageSection();
+      cascadeDeleteLowVoltageSection(instance.canvasId);
     }
 
     renderInstances();
@@ -503,6 +567,64 @@
     }
   }
 
+  function getPlacementCanvasId() {
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "idu";
+    if (mode === "idu" || mode === "odu") return mode;
+    if (mode === "split") return window.ESB.Mode.getActiveCanvasMode ? window.ESB.Mode.getActiveCanvasMode() : "idu";
+    return window.ESB.Mode && window.ESB.Mode.getActiveCanvasMode ? window.ESB.Mode.getActiveCanvasMode() : "idu";
+  }
+
+  function placeAtCenter(typeId) {
+    const mode = window.ESB.Mode ? window.ESB.Mode.getMode() : "idu";
+    const canvasId = getPlacementCanvasId();
+    const section = window.ESB.Sections.getById("main", canvasId);
+    const x = G.snapToGrid((section.leftX + section.rightX) / 2, C.PLACEMENT_GRID);
+    const scrollArea = document.getElementById("scrollArea");
+    const visibleY = scrollArea ? scrollArea.scrollTop + scrollArea.clientHeight / 2 : (section.topY + section.bottomY) / 2;
+    const y = window.ESB.Sections.getNearestRowY(visibleY, canvasId);
+    const preset = RELAY_PRESETS[typeId];
+    let selected = null;
+
+    if (preset) {
+      const designator = S.nextDesignator("R");
+      const relayGroup = `relay_${designator}`;
+      selected = S.createInstance(preset.previewTypeId, x, y, { label: designator, deviceGroup: designator, canvasId, relayGroup, placementPending: true });
+      preset.contactTypeIds.forEach((contactTypeId, index) => {
+        S.createInstance(contactTypeId, x, y + RELAY_ROW_OFFSET * (index + 1), { label: designator, deviceGroup: designator, canvasId, relayGroup, placementPending: true });
+      });
+    } else if (typeId === "transformer" && !window.ESB.Sections.hasLowVoltageSection(canvasId)) {
+      const main = window.ESB.Sections.getById("main", canvasId);
+      window.ESB.Sections.addLowVoltageSection(canvasId);
+      window.ESB.relayout();
+      selected = S.createInstance("transformer", G.snapToGrid((main.leftX + main.rightX) / 2, C.PLACEMENT_GRID), main.bottomY + C.SECTION_GAP / 2, { canvasId, placementPending: true });
+      window.ESB.Palette.render();
+    } else if (typeId === "thermostat_block") {
+      if (!window.ESB.Sections.hasLowVoltageSection(canvasId)) {
+        showToast("A transformer is required to add this component.");
+        return;
+      }
+      const low = window.ESB.Sections.getById("lowVoltage", canvasId);
+      if (low.tstatInstanceId) return;
+      const rTerminalY = low.topY + TSTAT_R_OFFSET_Y;
+      const tstatType = Lib.getType("thermostat_block");
+      const rRowLocalY = tstatType.terminals.find((terminal) => terminal.id === "r_l").y;
+      selected = S.createInstance("thermostat_block", low.leftX + 95, rTerminalY - rRowLocalY, { fixedPosition: true, canvasId });
+      S.createWire({ kind: "rail", railId: low.leftRailId, y: rTerminalY }, { kind: "terminal", instanceId: selected.id, terminalId: "r_l" }, canvasId);
+      window.ESB.Sections.attachTstat("lowVoltage", selected.id, rTerminalY, canvasId);
+      window.ESB.relayout(); window.ESB.Palette.render();
+    } else {
+      selected = S.createInstance(typeId, x, y, { canvasId, placementPending: true });
+    }
+
+    if (selected) {
+      S.select(selected.id);
+      renderInstances(); renderSelection();
+      if (mode === "split" && window.ESB.Mode.refreshSplitCanvases) window.ESB.Mode.refreshSplitCanvases();
+      showToast("Move the highlighted component to activate connections.");
+      if (window.ESB.History) window.ESB.History.observe();
+    }
+  }
+
   function startPaletteDrag(typeId, event) {
     dragMode = "new-instance";
     dragData = { typeId };
@@ -533,8 +655,21 @@
     const toolbarEl = target.closest("[data-toolbar-action]");
     if (toolbarEl) {
       const selected = S.getSelected();
-      if (selected && toolbarEl.dataset.toolbarAction === "delete") {
-        deleteInstance(selected.id);
+      if (selected) {
+        const action = toolbarEl.dataset.toolbarAction;
+        if (action === "delete") deleteInstance(selected.id);
+        if (action === "rotate" && !selected.fixedPosition) {
+          S.rotateInstance(selected.id, 90);
+          renderInstances(); renderSelection();
+        }
+        if (action === "transfer") {
+          const destination = selected.canvasId === "idu" ? "odu" : "idu";
+          selected.canvasId = destination;
+          S.select(null);
+          renderInstances(); renderSelection(); window.ESB.Palette.render();
+          showToast(`Component transferred to ${destination === "idu" ? "Indoor Unit" : "Outdoor Unit"}.`);
+        }
+        if (window.ESB.History) window.ESB.History.observe();
       }
       event.preventDefault();
       return;
@@ -570,7 +705,8 @@
           return;
         }
 
-        startPaletteDrag(paletteType, event);
+        placeAtCenter(paletteType);
+        event.preventDefault();
         return;
       }
     }
@@ -595,13 +731,32 @@
 
           dragMode = local.y <= LEAD_MOVE_ZONE_LENGTH ? "move-tip" : "rotate-lead";
           dragData = { instanceId: instance.id };
+          // Meter-probe movement uses a crosshair so the exact probe-tip
+          // landing point remains obvious on desktop and touch-capable apps.
+          setInteractionCursor("crosshair");
+          event.preventDefault();
+          return;
+        }
+
+        if (mode === "check" && type.isSwitchLike &&
+            instance.typeId !== "contact_no" && instance.typeId !== "contact_nc") {
+          window.ESB.ComponentState.toggle(instance.id);
           event.preventDefault();
           return;
         }
 
         if (canEditInstances) {
+          const alreadySelected = S.getSelected() && S.getSelected().id === instance.id;
           S.select(instance.id);
           renderSelection();
+
+          // Positioned components require a first tap to select. A second
+          // deliberate drag moves them. Newly placed pending components are
+          // the exception because moving them is the required next step.
+          if (!alreadySelected && !instance.placementPending) {
+            event.preventDefault();
+            return;
+          }
 
           dragMode = "move-instance";
           dragData = {
@@ -1006,9 +1161,14 @@
       instance.canvasId = targetCanvasId;
     }
 
-    // Split mode is components-only — no wiring capability at all, including
-    // the implicit touch-then-separate auto-wire that normal dragging gets.
-    if (instance && !inSplit) {
+    // A palette-placed component is inert until this first deliberate move.
+    // Its first release only activates it; it cannot snap, split, or create wires.
+    const wasPending = !!(instance && instance.placementPending);
+    if (instance && wasPending) {
+      instance.placementPending = false;
+    }
+    // Split mode is components-only. Pending components also skip all automatic wiring.
+    if (instance && !inSplit && !wasPending) {
       checkTouchAndAutoWire(instance);
       simplifyPassthroughWires(instance);
     }
@@ -1144,10 +1304,36 @@
       const validDrop = inSplit ? !!point : (point && point.x >= MIN_X);
       const targetCanvasId = inSplit ? context.canvasId : (mode === "idu" || mode === "odu" ? mode : null);
 
-      if (validDrop) {
+      // Transformer and thermostat terminals are intentionally unavailable
+      // in split-screen mode. Keep this hard guard even if a stale palette
+      // drag was started before the user entered split view.
+      const splitBlockedType = inSplit && (
+        dragData.typeId === "transformer" ||
+        dragData.typeId === "thermostat_block"
+      );
+
+      // Enforce one transformer and one thermostat terminal block per unit
+      // at the placement layer as well as in the palette. This prevents
+      // duplicates caused by stale UI state, rapid taps, or mode changes.
+      const duplicateSingleUse = targetCanvasId && (
+        (dragData.typeId === "transformer" || dragData.typeId === "thermostat_block") &&
+        S.state.instances.some((instance) =>
+          instance.typeId === dragData.typeId && instance.canvasId === targetCanvasId
+        )
+      );
+
+      if (splitBlockedType) {
+        showToast("Transformer and TSTAT Terminals must be added in the IDU or ODU view.");
+      } else if (duplicateSingleUse) {
+        showToast(
+          dragData.typeId === "transformer"
+            ? "Only one transformer is allowed per unit."
+            : "Only one TSTAT Terminals block is allowed per unit."
+        );
+      } else if (validDrop) {
         const snapped = {
           x: G.snapToGrid(point.x, C.PLACEMENT_GRID),
-          y: window.ESB.Sections.getNearestRowY(point.y)
+          y: window.ESB.Sections.getNearestRowY(point.y, targetCanvasId)
         };
         const clampPoint = inSplit ? clampToSplitCanvas : clampToCanvas;
 
@@ -1179,7 +1365,7 @@
           });
 
           S.select(coil.id);
-        } else if (!inSplit && dragData.typeId === "transformer" && !window.ESB.Sections.hasLowVoltageSection()) {
+        } else if (dragData.typeId === "transformer" && !window.ESB.Sections.hasLowVoltageSection(targetCanvasId)) {
           // First transformer placed: snap it to bridge the main ladder's
           // bottom rail and a newly-created low-voltage section's top
           // rail (H1/H2 and X1/X2 are exactly Config.SECTION_GAP/2 apart
@@ -1189,8 +1375,8 @@
           // freely-draggable instance. Sections are global, not per-panel,
           // so this bridging recipe is skipped in split mode (falls
           // through to the plain instance below instead).
-          const main = window.ESB.Sections.getById("main");
-          window.ESB.Sections.addLowVoltageSection();
+          const main = window.ESB.Sections.getById("main", targetCanvasId);
+          window.ESB.Sections.addLowVoltageSection(targetCanvasId);
           window.ESB.relayout();
 
           const bridgeX = G.snapToGrid((main.leftX + main.rightX) / 2, C.PLACEMENT_GRID);
@@ -1201,23 +1387,23 @@
           });
           S.select(instance.id);
           window.ESB.Palette.render();
-        } else if (!inSplit && dragData.typeId === "thermostat_block") {
+        } else if (dragData.typeId === "thermostat_block") {
           // TSTAT Terminals requires 24VAC to exist at all — without a
           // transformer there's no low-voltage section/rail for it to
           // bridge to, so the drop is rejected outright rather than
           // placing a disconnected block. Same Sections-are-global caveat
           // as the transformer branch above — skipped entirely in split
           // mode.
-          if (!window.ESB.Sections.hasLowVoltageSection()) {
+          if (!window.ESB.Sections.hasLowVoltageSection(targetCanvasId)) {
             showToast("A transformer is required to add this component.");
-          } else if (!window.ESB.Sections.getById("lowVoltage").tstatInstanceId) {
+          } else if (!window.ESB.Sections.getById("lowVoltage", targetCanvasId).tstatInstanceId) {
             // Fixed position bridging the low-voltage section's 24V rail
             // directly to the R row, same "auto-bridge on first placement"
             // idea as the transformer. Only one TSTAT Terminals block is
             // ever allowed (see ui/palette.js, which greys the row out
             // once one exists), so this branch's guard should always hold
             // whenever the palette let the drag start in the first place.
-            const lowSection = window.ESB.Sections.getById("lowVoltage");
+            const lowSection = window.ESB.Sections.getById("lowVoltage", targetCanvasId);
             const rTerminalY = lowSection.topY + TSTAT_R_OFFSET_Y;
             // R row's left terminal (local x -95) lands exactly on the
             // rail's own x — the rail reads as running straight into it,
@@ -1242,7 +1428,7 @@
               targetCanvasId
             );
 
-            window.ESB.Sections.attachTstat("lowVoltage", instance.id, rTerminalY);
+            window.ESB.Sections.attachTstat("lowVoltage", instance.id, rTerminalY, targetCanvasId);
             window.ESB.relayout();
             window.ESB.Palette.render();
 
@@ -1277,6 +1463,8 @@
 
     dragMode = null;
     dragData = null;
+    clearInteractionCursor();
+    if (window.ESB.History) window.ESB.History.observe();
   }
 
   function onKeyDown(event) {
@@ -1343,32 +1531,35 @@
   // (Sections.setRailTopOverride) so it reads as running straight out of
   // the breaker rather than through it.
   function createBuiltInBreakers() {
-    const main = window.ESB.Sections.getById("main");
-    const outerY = main.topY;
-    const innerY = outerY + BREAKER_SPAN;
-    const centerY = (outerY + innerY) / 2;
+    ["idu", "odu"].forEach((canvasId) => {
+      const alreadyExists = S.state.instances.some(
+        (instance) => instance.typeId === "breaker" && instance.canvasId === canvasId
+      );
+      if (alreadyExists) return;
 
-    // Rotated so the arcs curve toward each other (in toward the space
-    // between L1 and L2) rather than away — the opposite sign from what
-    // "-90 for L1 / +90 for L2" would suggest at face value, since the
-    // breaker's arc bulges in the direction that sign convention sends
-    // outward, not inward.
-    const l1 = S.createInstance("breaker", main.leftX, centerY, { label: "CB", locked: true });
-    l1.rotation = 90;
+      const main = window.ESB.Sections.getById("main", canvasId);
+      const outerY = main.topY;
+      const innerY = outerY + BREAKER_SPAN;
+      const centerY = (outerY + innerY) / 2;
 
-    const l2 = S.createInstance("breaker", main.rightX, centerY, { label: "CB", locked: true });
-    l2.rotation = -90;
+      const l1 = S.createInstance("breaker", main.leftX, centerY, { label: "CB", locked: true, canvasId });
+      l1.rotation = 90;
+      const l2 = S.createInstance("breaker", main.rightX, centerY, { label: "CB", locked: true, canvasId });
+      l2.rotation = -90;
 
-    S.createWire(
-      { kind: "terminal", instanceId: l1.id, terminalId: "t2" },
-      { kind: "rail", railId: main.leftRailId, y: innerY }
-    );
-    S.createWire(
-      { kind: "terminal", instanceId: l2.id, terminalId: "t1" },
-      { kind: "rail", railId: main.rightRailId, y: innerY }
-    );
+      S.createWire(
+        { kind: "terminal", instanceId: l1.id, terminalId: "t2" },
+        { kind: "rail", railId: main.leftRailId, y: innerY },
+        canvasId
+      );
+      S.createWire(
+        { kind: "terminal", instanceId: l2.id, terminalId: "t1" },
+        { kind: "rail", railId: main.rightRailId, y: innerY },
+        canvasId
+      );
 
-    window.ESB.Sections.setRailTopOverride("main", innerY, innerY);
+      window.ESB.Sections.setRailTopOverride("main", innerY, innerY, canvasId);
+    });
     window.ESB.relayout();
   }
 
@@ -1381,11 +1572,11 @@
     stage.addEventListener("pointerdown", onPointerDown);
     window.addEventListener("pointermove", onPointerMove);
     window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", clearInteractionCursor);
+    window.addEventListener("blur", clearInteractionCursor);
     window.addEventListener("keydown", onKeyDown);
 
-    if (!S.state.instances.some((instance) => instance.typeId === "breaker")) {
-      createBuiltInBreakers();
-    }
+    createBuiltInBreakers();
 
     createBuiltInEarthGrounds();
 
@@ -1396,6 +1587,7 @@
   window.ESB.CanvasInteractions = {
     init,
     startPaletteDrag,
+    placeAtCenter,
     renderInstances,
     renderSelection
   };

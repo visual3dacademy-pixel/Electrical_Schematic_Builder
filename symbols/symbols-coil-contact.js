@@ -1,4 +1,4 @@
-// Version 0.1
+// Version 1.0
 //
 // Coil and contact symbols. Draw functions render only the glyph in local,
 // unrotated coordinates (origin at the symbol's center) — labels are
@@ -39,13 +39,17 @@
     }
   });
 
-  function drawContactGlyph(parent, variant) {
+  function drawContactGlyph(parent, normallyClosed, closed) {
     leads(parent, 18);
     D.line(-18, -30, -18, 30, {}, parent);
     D.line(18, -30, 18, 30, {}, parent);
 
-    if (variant === "NC") {
-      D.line(-20, 30, 20, -30, {}, parent);
+    // Contact blade rotates between the authored open and closed positions.
+    // The electrical state is held in instance.params.closed by RelayController.
+    if (closed) {
+      D.line(-20, 0, 20, 0, {}, parent);
+    } else {
+      D.line(-20, 0, 18, -28, {}, parent);
     }
   }
 
@@ -69,8 +73,9 @@
       { id: "t2", x: HALF_W, y: 0 }
     ],
     labelAnchor: { x: 0, y: -48 },
-    draw(parent) {
-      drawContactGlyph(parent, "NO");
+    draw(parent, instance) {
+      const closed = !!(instance && instance.params && instance.params.closed);
+      drawContactGlyph(parent, false, closed);
     }
   });
 
@@ -91,8 +96,10 @@
       { id: "t2", x: HALF_W, y: 0 }
     ],
     labelAnchor: { x: 0, y: -48 },
-    draw(parent) {
-      drawContactGlyph(parent, "NC");
+    draw(parent, instance) {
+      const explicit = instance && instance.params && typeof instance.params.closed === "boolean";
+      const closed = explicit ? instance.params.closed : true;
+      drawContactGlyph(parent, true, closed);
     }
   });
 })();

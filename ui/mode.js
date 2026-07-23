@@ -1,4 +1,4 @@
-// Version 0.8
+// Version 3.0
 //
 // Mode system: build, check, idu, odu, split
 // - build: Full circuit builder (default)
@@ -121,6 +121,8 @@
       window.ESB.CanvasInteractions.renderSelection();
     } else if (mode === "idu" || mode === "odu") {
       // Single canvas mode (IDU or ODU)
+      activeCanvasMode = mode;
+      if (window.ESB.relayout) window.ESB.relayout();
       if (paletteSvg) paletteSvg.style.display = "block";
       renderSingleCanvasMode(mode);
       window.ESB.Palette.render();
@@ -151,6 +153,10 @@
     if (window.ESB.CircuitZoom) {
       window.ESB.CircuitZoom.refresh();
     }
+
+    if (window.ESB.BreakerControl) {
+      window.ESB.BreakerControl.render();
+    }
   }
 
   // "Indoor Unit"/"Outdoor Unit", drawn directly into the main circuitSvg
@@ -167,15 +173,7 @@
   function renderModeLabel(text) {
     const layer = ensureModeLabelLayer();
     D.clearGroup(layer);
-
-    const main = window.ESB.Sections.getById("main");
-    if (!main || !text) {
-      return;
-    }
-
-    const centerX = (main.leftX + main.rightX) / 2;
-    D.text(centerX, 40, text, 24, 800, "#111111", {}, layer);
-    D.text(centerX, 72, "Earth Ground", 16, 700, "#2a3340", {}, layer);
+    if (window.ESB.BreakerControl) window.ESB.BreakerControl.render();
   }
 
   function clearModeLabel() {
@@ -204,7 +202,7 @@
   // right margins — otherwise the ladder reads as pushed off-center
   // within the (now much narrower, since split into two columns) panel.
   function splitViewBoxMinX() {
-    const main = window.ESB.Sections.getById("main");
+    const main = window.ESB.Sections.getById("main", "idu");
     if (!main) {
       return 0;
     }
@@ -340,13 +338,11 @@
     const wiresLayer = D.group({ id: `${canvasId}WiresLayer` }, svgElement);
     const instancesLayer = D.group({ id: `${canvasId}InstancesLayer` }, svgElement);
     const selectionLayer = D.group({ id: `${canvasId}SelectionLayer` }, svgElement);
+    const headerLayer = D.group({ id: `${canvasId}HeaderLayer` }, svgElement);
 
     // Render rails (power rails) for this canvas
-    const main = window.ESB.Sections.getById("main");
+    const main = window.ESB.Sections.getById("main", canvasId);
     if (main) {
-      const centerX = (main.leftX + main.rightX) / 2;
-      D.text(centerX, 52, "Earth Ground", 16, 700, "#2a3340", {}, railsLayer);
-
       // Draw L1 (left) rail
       D.line(main.leftX, main.topY, main.leftX, main.bottomY,
         { stroke: "#000000", width: 3 }, railsLayer);
@@ -372,7 +368,7 @@
     // The low-voltage section (once a transformer exists) has its own
     // rails/rows too, and the fixed panel height already reserves room
     // for it whether or not it actually exists yet.
-    const lowSection = window.ESB.Sections.getById("lowVoltage");
+    const lowSection = window.ESB.Sections.getById("lowVoltage", canvasId);
     if (lowSection) {
       D.line(lowSection.leftX, lowSection.topY, lowSection.leftX, lowSection.bottomY,
         { stroke: "#000000", width: 3 }, railsLayer);
@@ -424,6 +420,10 @@
           glyphGroup
         );
 
+        if (instance.placementPending && !type.pivotAtTip) {
+          D.rect(-type.width / 2 - 16, -type.height / 2 - 16, type.width + 32, type.height + 32,
+            { fill: "#dff3ff", stroke: "#9fd6f5", "stroke-width": 2, rx: 12, opacity: 0.72, "pointer-events": "none" }, glyphGroup);
+        }
         Lib.drawInstance(glyphGroup, type, instance);
 
         if (type.labelAnchor) {
@@ -441,6 +441,10 @@
         }
       }
     });
+
+    if (window.ESB.BreakerControl) {
+      window.ESB.BreakerControl.drawHeader(headerLayer, canvasId, { hideTitle: true });
+    }
   }
 
   function setMode(nextMode) {
@@ -456,6 +460,12 @@
     mode = nextMode;
     applyMode();
     updateModeButtons();
+    window.dispatchEvent(new CustomEvent("esb-mode-change", {
+      detail: { mode, activeCanvasMode }
+    }));
+    if (window.ESB.ThermostatButtons) window.ESB.ThermostatButtons.refresh();
+    if (window.ESB.CanvasControls) window.ESB.CanvasControls.refresh();
+    if (window.ESB.History) window.ESB.History.refresh();
   }
 
   function setCheckCanvas(canvasMode) {
@@ -466,6 +476,7 @@
       applyMode();
       updateModeButtons();
       if (window.ESB.VoltageMeter) window.ESB.VoltageMeter.refresh();
+      if (window.ESB.ThermostatButtons) window.ESB.ThermostatButtons.refresh();
     }
   }
 

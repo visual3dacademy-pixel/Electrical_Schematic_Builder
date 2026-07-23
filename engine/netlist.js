@@ -1,4 +1,4 @@
-// Version 0.1
+// Version 0.2
 //
 // Builds the electrical netlist from the current graph: every terminal and
 // junction connected (directly or via a chain of wires) ends up sharing the

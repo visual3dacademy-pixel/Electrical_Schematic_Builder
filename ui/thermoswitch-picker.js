@@ -69,12 +69,12 @@
 
       button.addEventListener("pointerdown", (event) => {
         event.stopPropagation();
-        if (!window.ESB.CanvasInteractions || !window.ESB.CanvasInteractions.startPaletteDrag) {
+        if (!window.ESB.CanvasInteractions || !window.ESB.CanvasInteractions.placeAtCenter) {
           return;
         }
 
         close();
-        window.ESB.CanvasInteractions.startPaletteDrag(option.typeId, event);
+        window.ESB.CanvasInteractions.placeAtCenter(option.typeId);
       });
 
       grid.appendChild(button);

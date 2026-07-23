@@ -1,4 +1,4 @@
-// Version 0.2
+// Version 0.5
 // Ground and capacitor geometry normalized from the user's 2 mm-grid SVGs.
 
 (function () {
@@ -41,29 +41,40 @@
     }
   });
 
-  // Capacitor — traced from Capacitor(1).svg (viewBox 26.46x43.86).
-  // Source terminal centers are (13.23,5.67) and (13.23,38.20).
-  // Uniform scale 2.45927 maps the 32.53-unit source span to 80 pixels,
-  // placing both terminal centers exactly at y=-40 and y=+40.
+  // Capacitor — Version 0.5
+  // Compact three-grid-high symbol. Terminal centers are exactly 60 design
+  // pixels apart (three 20-pixel snap intervals). The arc and straight plate
+  // are 24 pixels wide, approximately 50% of the previous rendered width.
+  // Each lead ends at the visible terminal-circle edge (radius 5.5), so there
+  // is no gap between the terminal circle and its vertical lead.
   Lib.register({
     id: "capacitor",
     category: "passive",
     label: "Capacitor",
     defaultLabel: "",
-    width: 80,
-    height: 110,
+    width: 50,
+    height: 72,
     terminals: [
-      { id: "t1", x: 0, y: -40 },
-      { id: "t2", x: 0, y: 40 }
+      { id: "t1", x: 0, y: -30 },
+      { id: "t2", x: 0, y: 30 }
     ],
     labelAnchor: { x: 28, y: 0 },
     draw(parent) {
-      const g = D.group({ transform: "translate(-32.536,-53.943) scale(2.45927)" }, parent);
-      const sw = { width: 0.71 };
-      D.line(13.23, 38.2, 13.23, 24.63, sw, g);
-      D.line(13.23, 21.19, 13.23, 5.67, sw, g);
-      D.path("M.35,15.33c6.18,7.11,16.96,7.86,24.07,1.68.6-.52,1.16-1.08,1.68-1.68", sw, g);
-      D.line(26.11, 24.63, 0.35, 24.63, sw, g);
+      const sw = { width: 2.5 };
+      const terminalRadius = 5.5;
+
+      // Upper lead: terminal-circle edge to the center of the curved plate.
+      D.line(0, -30 + terminalRadius, 0, -4, sw, parent);
+
+      // Curved plate, reduced to 50% of the previous width.
+      D.path("M -12 -8 Q 0 4 12 -8", sw, parent);
+
+      // Straight plate, also reduced to 50% of the previous width.
+      D.line(-12, 7, 12, 7, sw, parent);
+
+      // Lower lead: straight plate to the terminal-circle edge.
+      D.line(0, 7, 0, 30 - terminalRadius, sw, parent);
     }
   });
+
 })();

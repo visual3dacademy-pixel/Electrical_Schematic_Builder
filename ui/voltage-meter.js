@@ -1,11 +1,5 @@
-// Version 0.4
-//
-// Temporary voltage readout for Check Circuit mode. The meter measures when
-// BOTH probe tips are on valid electrical test points: visible component
-// terminals (open circles) or the vertical line-voltage / low-voltage rails.
-// Earth Ground is a normal terminal fixed at 0 V by the voltage solver.
-// The future layered SVG meter can replace this UI without changing the
-// voltage solver.
+// Version 1.0
+// Full electrical-engine voltage readout for Check Circuit mode.
 
 (function () {
   "use strict";
@@ -30,12 +24,8 @@
     const candidates = [];
     const targetCanvasId = canvasId || null;
 
-    // Component terminals are checked first. This includes the built-in
-    // breaker circles, load terminals, transformer terminals, TSTAT rows,
-    // and the permanent Earth Ground terminal.
     S.state.instances.forEach((instance) => {
       if (instance.typeId.indexOf("meter_lead_") === 0) return;
-
       const instanceCanvasId = instance.canvasId || null;
       if (targetCanvasId && instanceCanvasId && instanceCanvasId !== targetCanvasId) return;
 
@@ -45,37 +35,25 @@
       type.terminals.forEach((terminal) => {
         const terminalPoint = G.terminalWorldPoint(instance, terminal.id);
         if (!terminalPoint) return;
-
         candidates.push({
           priority: 0,
-          ref: {
-            kind: "terminal",
-            instanceId: instance.id,
-            terminalId: terminal.id
-          },
+          ref: { kind: "terminal", instanceId: instance.id, terminalId: terminal.id },
           distance: G.distance(point, terminalPoint)
         });
       });
     });
 
-    // Every vertical rail is an electrical bus. A probe can touch anywhere
-    // along its rendered span, and every point on the same rail resolves to
-    // the same net because engine/netlist.js intentionally ignores rail Y.
     const Sections = window.ESB.Sections;
     if (Sections && typeof Sections.getAll === "function") {
-      Sections.getAll().forEach((section) => {
+      Sections.getAll(targetCanvasId).forEach((section) => {
         [
           { side: "left", railId: section.leftRailId, x: section.leftX },
           { side: "right", railId: section.rightRailId, x: section.rightX }
         ].forEach((rail) => {
           const bounds = Sections.getRailBounds(section, rail.side);
           if (!bounds) return;
-
           const nearestY = Math.max(bounds.topY, Math.min(bounds.bottomY, point.y));
-          const dx = point.x - rail.x;
-          const dy = point.y - nearestY;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
+          const distance = Math.hypot(point.x - rail.x, point.y - nearestY);
           candidates.push({
             priority: 1,
             ref: { kind: "rail", railId: rail.railId, y: nearestY },
@@ -92,29 +70,30 @@
 
     const nearest = candidates[0] || null;
     const hitRadius = Number(C.TERMINAL_HIT_RADIUS) || 28;
-
     return nearest && nearest.distance <= hitRadius ? nearest.ref : null;
   }
 
   function normalizeVoltage(value) {
-    if (!Number.isFinite(value)) return 0;
-
+    if (!Number.isFinite(value)) return null;
     const magnitude = Math.abs(value);
-
-    if (Math.abs(magnitude - 240) <= 30) return 240;
-    if (Math.abs(magnitude - 120) <= 20) return 120;
-    if (Math.abs(magnitude - 24) <= 6) return 24;
-    return 0;
+    if (magnitude < 0.05) return 0;
+    if (Math.abs(magnitude - 24) <= 0.75) return 24;
+    if (Math.abs(magnitude - 120) <= 1.5) return 120;
+    if (Math.abs(magnitude - 240) <= 2.5) return 240;
+    return Math.round(magnitude * 10) / 10;
   }
 
-  function formatVoltage(value) {
-    const normalized = normalizeVoltage(value);
-    return normalized === 0 ? "0.0 VAC" : `${normalized} VAC`;
+  function formatMeasurement(measurement) {
+    if (!measurement || !measurement.valid) return "— VAC";
+    const value = normalizeVoltage(measurement.voltsRms);
+    if (value === null) return "— VAC";
+    return value === 0 ? "0.0 VAC" : `${value} VAC`;
   }
 
-  function setZeroReading() {
+  function setWaiting() {
     displayEl.textContent = "0.0 VAC";
     displayEl.dataset.state = "waiting";
+    displayEl.title = "Place both probes on electrical test points";
   }
 
   function refresh() {
@@ -126,48 +105,41 @@
 
     const black = getLead("meter_lead_black");
     const red = getLead("meter_lead_red");
-
     const activeCanvasId = window.ESB.Mode && window.ESB.Mode.getActiveCanvasMode
       ? window.ESB.Mode.getActiveCanvasMode()
       : null;
 
-    const blackRef = black
-      ? terminalRefAtProbe({ x: black.x, y: black.y }, activeCanvasId)
-      : null;
+    const blackRef = black ? terminalRefAtProbe({ x: black.x, y: black.y }, activeCanvasId) : null;
+    const redRef = red ? terminalRefAtProbe({ x: red.x, y: red.y }, activeCanvasId) : null;
 
-    const redRef = red
-      ? terminalRefAtProbe({ x: red.x, y: red.y }, activeCanvasId)
-      : null;
-
-    // Both probes must be on valid test points. Valid points are component
-    // terminals/open circles or any point along a rendered voltage rail.
-    // A floating probe still reads 0.0 VAC.
     if (!blackRef || !redRef) {
-      setZeroReading();
+      setWaiting();
       return;
     }
 
     try {
-      const result = window.ESB.VoltageSolver.solve(S.state);
-      const measured = result.voltageBetween(redRef, blackRef);
-      displayEl.textContent = formatVoltage(measured);
-      displayEl.dataset.state = "reading";
+      const solution = window.ESB.VoltageSolver.solve(S.state);
+      const measurement = solution.measureVoltage(redRef, blackRef);
+      displayEl.textContent = formatMeasurement(measurement);
+      displayEl.dataset.state = measurement.valid ? "reading" : "floating";
+      displayEl.title = measurement.valid
+        ? `${measurement.voltsRms.toFixed(3)} VAC calculated`
+        : `Measurement unavailable: ${measurement.reason}`;
     } catch (error) {
       console.error("Voltage calculation failed:", error);
-      setZeroReading();
+      displayEl.textContent = "ERR";
       displayEl.dataset.state = "error";
+      displayEl.title = error.message;
     }
   }
 
   function init() {
     const overlays = window.ESB.Drawing.getElements().overlays;
-
     displayEl = document.createElement("div");
     displayEl.id = "voltageReadout";
     displayEl.setAttribute("aria-live", "polite");
     displayEl.textContent = "0.0 VAC";
     overlays.appendChild(displayEl);
-
     timer = window.setInterval(refresh, 120);
     refresh();
   }
@@ -175,7 +147,6 @@
   function destroy() {
     if (timer) window.clearInterval(timer);
     timer = null;
-
     if (displayEl) displayEl.remove();
     displayEl = null;
   }
@@ -185,6 +156,7 @@
     refresh,
     destroy,
     terminalRefAtProbe,
-    normalizeVoltage
+    normalizeVoltage,
+    formatMeasurement
   };
 })();

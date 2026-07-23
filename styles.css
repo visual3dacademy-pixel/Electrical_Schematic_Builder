@@ -630,3 +630,42 @@ body {
 .circuit-zoom-control.is-disabled .circuit-zoom-range {
   cursor: not-allowed;
 }
+
+/* Canvas action controls — Version 1.0 */
+.canvas-action-controls {
+  position: absolute;
+  left: calc(13.5417% + 196px);
+  bottom: 16px;
+  z-index: 27;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  pointer-events: auto;
+}
+.canvas-action-controls button {
+  min-width: 62px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #bfc9d6;
+  border-radius: 7px;
+  background: rgba(255,255,255,0.97);
+  color: #2a3340;
+  font: 800 13px Arial, Helvetica, sans-serif;
+  box-shadow: 0 3px 10px rgba(25,42,66,0.11);
+  cursor: pointer;
+}
+.canvas-action-controls button:hover:not(:disabled) { border-color: #2377e8; color: #2377e8; }
+.canvas-action-controls button:disabled { opacity: 0.42; cursor: not-allowed; box-shadow: none; }
+
+
+/* ================================================================
+   Interaction cursor restoration — v3.3
+   The body-level class prevents component hit targets from overriding the
+   crosshair while a wire is actively being drawn.
+   ================================================================ */
+html.esb-wire-dragging,
+html.esb-wire-dragging *,
+body.esb-wire-dragging,
+body.esb-wire-dragging * {
+  cursor: crosshair !important;
+}
